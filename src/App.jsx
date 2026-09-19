@@ -1,11 +1,27 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { CarViewer } from './components/CarViewer';
 import { DebugPanel } from './components/DebugPanel';
 import { InspectionPanel } from './components/InspectionPanel';
+import { VehicleWorkspace } from './components/VehicleWorkspace';
+import { AiImportModal } from './components/AiImportModal';
+import { VEHICLES, getDefaultVehicle, getVehicleById } from './data/vehicleData';
 import { getInspectionConfig, calculateCameraFraming } from './config/inspectionConfig';
-import { Car, MousePointer, RotateCw, ZoomIn, ArrowLeft } from 'lucide-react';
+import { Car, MousePointer, RotateCw, ZoomIn, ArrowLeft, CheckCircle2 } from 'lucide-react';
 
 export default function App() {
+  const containerRef = useRef(null);
+
+  // Vehicle State (Generic Vehicle-Agnostic Model)
+  const [currentVehicleId, setCurrentVehicleId] = useState(VEHICLES[0].id);
+  const currentVehicle = getVehicleById(currentVehicleId);
+
+  // Dynamic Records Version Tracker (triggers re-render when records change)
+  const [recordsVersion, setRecordsVersion] = useState(0);
+
+  // AI Import Modal State
+  const [isAiImportOpen, setIsAiImportOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState(null);
+
   const [modelData, setModelData] = useState({
     rootTree: null,
     flatNodes: [],
@@ -17,12 +33,12 @@ export default function App() {
   const [selectedMesh, setSelectedMesh] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Component Inspection Mode States
+  // Component Inspection Mode States (3D View)
   const [activeInspectionConfig, setActiveInspectionConfig] = useState(null);
   const [inspectionCameraFocus, setInspectionCameraFocus] = useState(null);
   const [showHierarchyInInspection, setShowHierarchyInInspection] = useState(false);
 
-  // Callback when model finishes loading and traversing
+  // Callback when 3D model finishes loading and traversing
   const handleLoaded = useCallback((data) => {
     setModelData(data);
     setIsLoading(false);
@@ -58,6 +74,29 @@ export default function App() {
     setShowHierarchyInInspection(false);
   }, []);
 
+  // When a component is clicked from the workspace history, scroll to top and inspect
+  const handleInspectComponentFromWorkspace = useCallback(
+    (componentId) => {
+      if (containerRef.current) {
+        containerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+
+      if (componentId) {
+        const config = getInspectionConfig(componentId);
+        if (config && modelData.nodeMap) {
+          const meshObj =
+            modelData.nodeMap.get(componentId)?.objectRef ||
+            modelData.nodeMap.get(config.targetMeshName)?.objectRef;
+          if (meshObj) {
+            const cameraFraming = calculateCameraFraming(meshObj);
+            handleEnterInspection(config, cameraFraming);
+          }
+        }
+      }
+    },
+    [modelData, handleEnterInspection]
+  );
+
   // When a mesh is clicked in the 3D viewport
   const handleSelectMesh = useCallback((mesh) => {
     setSelectedMesh(mesh);
@@ -67,20 +106,8 @@ export default function App() {
   const handleSelectNode = useCallback(
     (node) => {
       if (node.objectRef) {
-        console.log(
-          '%c📋 [Selected via Hierarchy Tree]',
-          'color: #a855f7; font-weight: bold; font-size: 13px;'
-        );
-        console.log(`Node #${node.index}: "%c${node.name}%c"`, 'color: #c084fc; font-weight: bold;', '');
-        console.log('Type:', node.type);
-        console.log('Parent:', node.parentName || '(root)');
-        console.log('Vertices:', node.vertexCount);
-        console.log('Material:', node.materialName);
-        console.log('Object Reference:', node.objectRef);
-
         setSelectedMesh(node.objectRef);
 
-        // If user clicks an inspectable component in the tree, enter inspection mode for it
         const config = getInspectionConfig(node.name);
         if (config && !activeInspectionConfig) {
           const cameraFraming = calculateCameraFraming(node.objectRef);
@@ -91,106 +118,147 @@ export default function App() {
     [activeInspectionConfig, handleEnterInspection]
   );
 
+  // When a record is imported via AI
+  const handleRecordSaved = useCallback((newRecord, componentId) => {
+    setRecordsVersion((v) => v + 1);
+    setToastMessage(`Service record successfully saved.`);
+    setTimeout(() => setToastMessage(null), 3500);
+
+    // If user saved a record for a component, focus it
+    if (componentId) {
+      handleInspectComponentFromWorkspace(componentId);
+    }
+  }, [handleInspectComponentFromWorkspace]);
+
   return (
-    <div className="app-container">
-      {/* Top Header Overlay */}
-      <header className="header-overlay">
-        <div className="header-title">
-          <Car size={18} color="#38bdf8" />
-          <span>Carma 3D Prototype</span>
+    <div className="app-workspace-page" ref={containerRef}>
+      {/* Sticky Top Navigation Bar */}
+      <header className="workspace-navbar">
+        <div className="navbar-brand">
+          <div className="navbar-brand-icon">
+            <Car size={18} color="#38bdf8" />
+          </div>
+          <div className="navbar-brand-text">
+            <span className="navbar-brand-title">Carma</span>
+            <span className="navbar-brand-sub">Vehicle Workspace</span>
+          </div>
         </div>
-        <div className="header-subtitle">
-          {activeInspectionConfig
-            ? `Inspecting: ${activeInspectionConfig.title}`
-            : 'Hyundai Eon Component Hierarchy & Inspection'}
-        </div>
-        <div className="header-badges">
-          {activeInspectionConfig ? (
-            <span className="badge badge-cyan">Inspection Active</span>
-          ) : (
-            <span className="badge badge-cyan">GLB Scene Graph</span>
-          )}
-          <span className="badge">R3F + Three.js</span>
-          {modelData.totalCount > 0 && (
-            <span className="badge">{modelData.meshCount} Meshes</span>
-          )}
+
+        <div className="navbar-center-info">
+          <span className="badge badge-vehicle-active">
+            {currentVehicle.make} {currentVehicle.model} ({currentVehicle.year})
+          </span>
+          <span className="badge badge-reg-muted">{currentVehicle.registrationNumber}</span>
         </div>
       </header>
 
-      {/* Prominent Back to Vehicle Floating Button (When in Inspection Mode) */}
-      {activeInspectionConfig && (
-        <div className="floating-back-container">
-          <button
-            className="floating-back-btn"
-            onClick={handleExitInspection}
-            title="Exit Inspection and return to vehicle view"
-          >
-            <ArrowLeft size={16} />
-            <span>Back to Vehicle</span>
-          </button>
-        </div>
-      )}
+      {/* SECTION 1: HERO PRIMARY AREA — 3D VEHICLE */}
+      <section className="hero-3d-section">
+        {/* Loading Screen for 3D Asset */}
+        {isLoading && (
+          <div className="loading-screen">
+            <div className="spinner"></div>
+            <div className="loading-text">
+              Loading {currentVehicle.make} {currentVehicle.model} 3D Model...
+            </div>
+          </div>
+        )}
 
-      {/* Loading Screen */}
-      {isLoading && (
-        <div className="loading-screen">
-          <div className="spinner"></div>
-          <div className="loading-text">Loading Hyundai Eon 3D Model...</div>
+        {/* 3D Canvas Viewport */}
+        <div className="hero-3d-canvas-container">
+          <CarViewer
+            onLoaded={handleLoaded}
+            onSelectMesh={handleSelectMesh}
+            selectedMesh={selectedMesh}
+            inspectionConfig={activeInspectionConfig}
+            inspectionCameraFocus={inspectionCameraFocus}
+            onEnterInspection={handleEnterInspection}
+          />
         </div>
-      )}
 
-      {/* 3D Canvas Viewport */}
-      <CarViewer
-        onLoaded={handleLoaded}
-        onSelectMesh={handleSelectMesh}
-        selectedMesh={selectedMesh}
-        inspectionConfig={activeInspectionConfig}
-        inspectionCameraFocus={inspectionCameraFocus}
-        onEnterInspection={handleEnterInspection}
+        {/* Inspection Mode Status Overlay / Back to Vehicle Button */}
+        {activeInspectionConfig ? (
+          <div className="floating-back-container">
+            <button
+              className="floating-back-btn"
+              onClick={handleExitInspection}
+              title="Exit Inspection and return to full vehicle view"
+            >
+              <ArrowLeft size={16} />
+              <span>Back to Vehicle</span>
+            </button>
+          </div>
+        ) : (
+          <div className="hero-interaction-hint">
+            <span className="hint-pill">
+              Click any component to inspect history & records
+            </span>
+          </div>
+        )}
+
+        {/* Inspection Panel (Slides in on right when a component is inspected) */}
+        {activeInspectionConfig && !showHierarchyInInspection && (
+          <InspectionPanel
+            config={activeInspectionConfig}
+            onExit={handleExitInspection}
+            onOpenHierarchy={() => setShowHierarchyInInspection(true)}
+          />
+        )}
+
+        {/* Diagnostic Scene Graph Tree (If hierarchy explicitly opened) */}
+        {showHierarchyInInspection && (
+          <DebugPanel
+            rootTree={modelData.rootTree}
+            flatNodes={modelData.flatNodes}
+            nodeMap={modelData.nodeMap}
+            totalCount={modelData.totalCount}
+            meshCount={modelData.meshCount}
+            groupCount={modelData.groupCount}
+            selectedMesh={selectedMesh}
+            onSelectNode={handleSelectNode}
+          />
+        )}
+
+        {/* Navigation & Interaction Hint Overlay (Bottom Left of 3D Canvas) */}
+        <div className="hint-overlay">
+          <div className="hint-item">
+            <RotateCw size={12} />
+            <span><span className="hint-key">Left Drag</span> Orbit</span>
+          </div>
+          <div className="hint-item">
+            <ZoomIn size={12} />
+            <span><span className="hint-key">Scroll</span> Zoom</span>
+          </div>
+          <div className="hint-item">
+            <MousePointer size={12} />
+            <span><span className="hint-key">Right Drag</span> Pan</span>
+          </div>
+        </div>
+      </section>
+
+      {/* SECTION 2: VEHICLE WORKSPACE & DATA UNDERNEATH */}
+      <VehicleWorkspace
+        vehicle={currentVehicle}
+        onInspectComponent={handleInspectComponentFromWorkspace}
+        onOpenAiImport={() => setIsAiImportOpen(true)}
+        recordsVersion={recordsVersion}
       />
 
-      {/* Right Side: Inspection Panel OR Diagnostic Hierarchy Tree */}
-      {activeInspectionConfig && !showHierarchyInInspection ? (
-        <InspectionPanel
-          config={activeInspectionConfig}
-          onExit={handleExitInspection}
-          onOpenHierarchy={() => setShowHierarchyInInspection(true)}
-        />
-      ) : (
-        <DebugPanel
-          rootTree={modelData.rootTree}
-          flatNodes={modelData.flatNodes}
-          nodeMap={modelData.nodeMap}
-          totalCount={modelData.totalCount}
-          meshCount={modelData.meshCount}
-          groupCount={modelData.groupCount}
-          selectedMesh={selectedMesh}
-          onSelectNode={handleSelectNode}
-        />
-      )}
+      {/* AI Document Import Modal */}
+      <AiImportModal
+        isOpen={isAiImportOpen}
+        onClose={() => setIsAiImportOpen(false)}
+        onRecordSaved={handleRecordSaved}
+        defaultComponentId={activeInspectionConfig?.targetMeshName || null}
+      />
 
-      {/* Navigation & Interaction Hint Overlay */}
-      <div className="hint-overlay">
-        <div className="hint-item">
-          <RotateCw size={13} />
-          <span><span className="hint-key">Left Drag</span> Orbit</span>
+      {/* Global Toast Notification */}
+      {toastMessage && (
+        <div className="global-toast-notification">
+          <CheckCircle2 size={16} color="#10b981" />
+          <span>{toastMessage}</span>
         </div>
-        <div className="hint-item">
-          <ZoomIn size={13} />
-          <span><span className="hint-key">Scroll</span> Zoom</span>
-        </div>
-        <div className="hint-item">
-          <MousePointer size={13} />
-          <span><span className="hint-key">Right Drag</span> Pan</span>
-        </div>
-        <div className="hint-item" style={{ borderLeft: '1px solid rgba(255,255,255,0.1)', paddingLeft: 8 }}>
-          {activeInspectionConfig ? (
-            <span>Exploded Front Wheel Assembly | Click <strong>Back to Vehicle</strong> to return</span>
-          ) : (
-            <span><span className="hint-key">Click tyre front</span> Enter Inspection Mode</span>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   );
 }

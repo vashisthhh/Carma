@@ -16,39 +16,45 @@
  */
 
 export const VEHICLE_SERVICE_DATA = {
-  vehicleId: 'hyundai-eon-2015',
-  displayName: 'Hyundai Eon (2015)',
+  vehicleId: 'veh-001',
+  displayName: 'Vehicle Workspace',
   vin: 'MALAA51BLFM129841',
   components: {
+    'tail-light': {
+      componentId: 'tail-light',
+      displayName: 'Tail Light',
+      aliases: ['tail light', 'taillight', 'tail-light', 'Rear Combination Lamp', 'Tail Lamp', 'tail-lamp'],
+      records: []
+    },
     'rear-glass': {
       componentId: 'rear-glass',
       displayName: 'Back Glass',
-      aliases: ['Rear Glass', 'back-glass', 'Rear Glass besel', 'back glass'],
-      records: [
-        {
-          id: 'record-001',
-          date: '2025-03-18',
-          mileage: 31204,
-          type: 'Replacement',
-          cost: 4800,
-          description: 'Rear glass replacement'
-        }
-      ]
+      aliases: ['Rear Glass', 'back-glass', 'Rear Glass besel', 'back glass', 'windshield'],
+      records: []
     },
     'tyre-front-right': {
       componentId: 'tyre-front-right',
       displayName: 'Front Right Tyre',
       aliases: ['tyre-front-right', 'Right Front Tyre', 'front-right-tyre', 'front right tyre'],
-      records: [
-        {
-          id: 'record-002',
-          date: '2026-01-12',
-          mileage: 42381,
-          type: 'Replacement',
-          cost: 8400,
-          description: 'OEM tyre replacement (MRF ZVTS 155/70 R13)'
-        }
-      ]
+      records: []
+    },
+    'tyre-front-left': {
+      componentId: 'tyre-front-left',
+      displayName: 'Front Left Tyre',
+      aliases: ['tyre-front-left', 'Left Front Tyre', 'front-left-tyre', 'front left tyre'],
+      records: []
+    },
+    'tyre-rear-right': {
+      componentId: 'tyre-rear-right',
+      displayName: 'Rear Right Tyre',
+      aliases: ['tyre-rear-right', 'Right Rear Tyre', 'rear-right-tyre', 'rear right tyre'],
+      records: []
+    },
+    'tyre-rear-left': {
+      componentId: 'tyre-rear-left',
+      displayName: 'Rear Left Tyre',
+      aliases: ['tyre-rear-left', 'Left Rear Tyre', 'rear-left-tyre', 'rear left tyre'],
+      records: []
     },
     'headlight-right': {
       componentId: 'headlight-right',
@@ -62,64 +68,48 @@ export const VEHICLE_SERVICE_DATA = {
         'Right Headlight',
         'right headlight'
       ],
-      records: [
-        {
-          id: 'record-003',
-          date: '2025-09-07',
-          mileage: 36720,
-          type: 'Replacement',
-          cost: 3200,
-          description: 'Right headlight assembly replacement and beam leveling'
-        }
-      ]
+      records: []
+    },
+    'headlight-left': {
+      componentId: 'headlight-left',
+      displayName: 'Left Headlight',
+      aliases: ['headlight-left', 'Left Headlight', 'left headlight'],
+      records: []
     },
     'steering': {
       componentId: 'steering',
       displayName: 'Steering',
       aliases: ['Steering', 'Steering column', 'hyundai logo steering', 'steering'],
-      records: [
-        {
-          id: 'record-004',
-          date: '2026-08-14',
-          mileage: 61240,
-          type: 'Inspection',
-          cost: 500,
-          description: 'Steering rack play inspection and column alignment check'
-        }
-      ]
+      records: []
     },
     'seat-front': {
       componentId: 'seat-front',
       displayName: 'Front Seat',
       aliases: ['Seat Front', 'Front Seat', 'seat-front', 'front seat'],
-      records: [
-        {
-          id: 'record-005',
-          date: '2024-11-05',
-          mileage: 28450,
-          type: 'Maintenance',
-          cost: 1200,
-          description: 'Seat slider mechanism lubrication and recline spring check'
-        }
-      ]
+      records: []
     },
     'boot-lock': {
       componentId: 'boot-lock',
       displayName: 'Boot Lock',
       aliases: ['Boot Lock', 'boot-lock', 'boot lock'],
-      records: [
-        {
-          id: 'record-006',
-          date: '2025-06-20',
-          mileage: 34100,
-          type: 'Repair',
-          cost: 850,
-          description: 'Tailgate latch alignment and lock striker adjustment'
-        }
-      ]
+      records: []
     }
   }
 };
+
+export const SUPPORTED_COMPONENTS = [
+  { id: 'tail-light', name: 'Tail Light' },
+  { id: 'tyre-front-right', name: 'Front Right Tyre' },
+  { id: 'tyre-front-left', name: 'Front Left Tyre' },
+  { id: 'tyre-rear-right', name: 'Rear Right Tyre' },
+  { id: 'tyre-rear-left', name: 'Rear Left Tyre' },
+  { id: 'headlight-right', name: 'Right Headlight' },
+  { id: 'headlight-left', name: 'Left Headlight' },
+  { id: 'rear-glass', name: 'Back Glass' },
+  { id: 'steering', name: 'Steering' },
+  { id: 'seat-front', name: 'Front Seat' },
+  { id: 'boot-lock', name: 'Boot Lock' }
+];
 
 /**
  * Format raw mesh name or identifier into a clean title
@@ -244,5 +234,58 @@ export function addServiceRecord(identifier, record) {
   targetComponent.records.unshift(newRecord);
 
   return newRecord;
+}
+
+/**
+ * Get all service records across all components for a vehicle, sorted chronologically (newest first).
+ * 
+ * @param {string} [vehicleId] - Optional vehicle ID
+ * @returns {Array<object>} Chronological list of service records with component metadata
+ */
+export function getAllServiceRecords(vehicleId) {
+  const allRecords = [];
+
+  for (const [componentKey, comp] of Object.entries(VEHICLE_SERVICE_DATA.components)) {
+    if (Array.isArray(comp.records)) {
+      for (const rec of comp.records) {
+        allRecords.push({
+          ...rec,
+          componentId: comp.componentId || componentKey,
+          componentDisplayName: comp.displayName || formatDisplayName(componentKey)
+        });
+      }
+    }
+  }
+
+  // Sort chronologically descending (newest date first)
+  allRecords.sort((a, b) => {
+    const dateA = new Date(a.date || 0).getTime();
+    const dateB = new Date(b.date || 0).getTime();
+    if (dateB !== dateA) return dateB - dateA;
+    return (b.mileage || 0) - (a.mileage || 0);
+  });
+
+  return allRecords;
+}
+
+/**
+ * Dynamically calculate documented history summary metrics for a vehicle.
+ * 
+ * @param {string} [vehicleId] - Optional vehicle ID
+ * @returns {{ totalRecords: number, documentCount: number, totalSpend: number, records: Array<object> }}
+ */
+export function getVehicleServiceSummary(vehicleId) {
+  const records = getAllServiceRecords(vehicleId);
+
+  const totalRecords = records.length;
+  const documentCount = records.filter((r) => Boolean(r.document)).length;
+  const totalSpend = records.reduce((sum, r) => sum + (Number(r.cost) || 0), 0);
+
+  return {
+    totalRecords,
+    documentCount,
+    totalSpend,
+    records
+  };
 }
 
