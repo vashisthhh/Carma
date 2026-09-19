@@ -1,12 +1,7 @@
-import { defineConfig, loadEnv } from 'vite';
-import react from '@vitejs/plugin-react';
+import fs from 'fs';
 import zlib from 'zlib';
 
-/**
- * Extracts plain text from a PDF buffer by decompressing FlateDecode streams,
- * parsing ToUnicode CMaps (for CID/Identity-H fonts), and decoding Tj/TJ operators.
- */
-function extractTextFromPDFBuffer(pdfBuffer) {
+export function extractTextFromPDFBuffer(pdfBuffer) {
   let fullText = '';
   const bufferString = pdfBuffer.toString('latin1');
 
@@ -52,6 +47,7 @@ function extractTextFromPDFBuffer(pdfBuffer) {
       }
     }
 
+    // Also handle beginbfrange
     const rangeRegex = /beginbfrange([\s\S]*?)endbfrange/g;
     let rangeMatch;
     while ((rangeMatch = rangeRegex.exec(stream)) !== null) {
@@ -130,16 +126,12 @@ function extractTextFromPDFBuffer(pdfBuffer) {
   return fullText;
 }
 
-/**
- * Unified document-understanding engine for automotive records.
- * Performs both relevance determination and strict field extraction in one pass.
- */
-function understandDocumentContent(docText, fileName = '', componentName = '', componentId = '') {
+export function understandDocumentContent(docText, fileName = '', componentName = '', componentId = '') {
   const combined = `${fileName}\n${docText}`.trim();
   const normalized = combined.replace(/[_.\-\/]/g, ' ');
   const lines = combined.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
 
-  // Evidence of vehicle / automotive context (make/model, parts, service actions, labour, automotive terms)
+  // Evidence of vehicle / automotive context
   const vehicleRegex = /\b(hyundai|eon|maruti|suzuki|honda|tata|toyota|mahindra|ford|volkswagen|skoda|renault|nissan|kia|car|vehicle|automobile|motor|auto|tail\s*light|tail\s*lamp|taillight|headlight|headlamp|fog\s*lamp|lamp|bulb|tyre|tire|wheel|rim|windshield|rear\s*glass|glass|brake|pad|disc|caliper|battery|engine|oil\s*filter|air\s*filter|coolant|bumper|fender|bonnet|hood|mirror|door|wiper|steering|suspension|strut|shock\s*absorber|clutch|exhaust|silencer|seat|spark\s*plug|fuse|belt|replacement|replaced|replace|repair|repaired|maintenance|servicing|periodic\s*service|inspection|checkup|diagnostic|alignment|balancing|labour|labor|fitting|installation|job\s*card|workshop|garage|service\s*center|service\s*centre|service\s*plaza|auto\s*care|tyre\s*care|car\s*care)\b/i;
 
   const hasVehicleEvidence = vehicleRegex.test(normalized);
@@ -148,7 +140,6 @@ function understandDocumentContent(docText, fileName = '', componentName = '', c
   const academicRegex = /\b(marksheet|mark\s*sheet|grade\s*sheet|leaving\s*certificate|transfer\s*certificate|school|college|university|board\s*of\s*secondary|cbse|icse|diploma|degree|academic|passing\s*certificate|10th\s*std|12th\s*std)\b/i;
   const cvResumeRegex = /\b(curriculum\s*vitae|resume|biodata|bio\s*data|work\s*experience|education\s*qualification|personal\s*profile|\bcv\b)\b/i;
 
-  // Case A: Academic document
   if (academicRegex.test(normalized) && !hasVehicleEvidence) {
     return {
       isVehicleDocument: false,
@@ -159,7 +150,6 @@ function understandDocumentContent(docText, fileName = '', componentName = '', c
     };
   }
 
-  // Case B: Curriculum Vitae / Resume
   if (cvResumeRegex.test(normalized) && !hasVehicleEvidence) {
     return {
       isVehicleDocument: false,
@@ -170,7 +160,6 @@ function understandDocumentContent(docText, fileName = '', componentName = '', c
     };
   }
 
-  // Case C: Unrelated document without vehicle evidence
   if (!hasVehicleEvidence) {
     return {
       isVehicleDocument: false,
@@ -181,7 +170,7 @@ function understandDocumentContent(docText, fileName = '', componentName = '', c
     };
   }
 
-  // Document is a vehicle document! Extract strictly visible fields.
+  // 1. Service Type
   let serviceType = null;
   if (/\b(replacement|replaced|replace|fitment|new part|r&r)\b/i.test(normalized)) {
     serviceType = 'Replacement';
@@ -195,7 +184,7 @@ function understandDocumentContent(docText, fileName = '', componentName = '', c
     serviceType = 'Replacement';
   }
 
-  // Date (Strict: null if absent)
+  // 2. Date (Strict: null if absent)
   let date = null;
   const isoMatch = combined.match(/\b(202[0-9])[-/](0[1-9]|1[0-2])[-/](0[1-9]|[12][0-9]|3[01])\b/);
   const dmyMatch = combined.match(/\b(0[1-9]|[12][0-9]|3[01])[-/.](0[1-9]|1[0-2])[-/.](202[0-9])\b/);
@@ -215,7 +204,17 @@ function understandDocumentContent(docText, fileName = '', componentName = '', c
     date = `${textDateMatch[3]}-${mStr}-${day}`;
   }
 
-  // Cost (Strict: null if absent)
+  // 3. Mileage (Strict: null if absent, never guess or invent)
+  let mileage = null;
+  const mileageMatch = combined.match(/(?:mileage|odometer|odo|kms?|km reading)[\s\S]{0,30}?([\d,]{4,7})\s*(?:km|kms)?/i);
+  if (mileageMatch) {
+    const num = parseInt(mileageMatch[1].replace(/,/g, ''), 10);
+    if (!isNaN(num) && num > 0 && num < 1000000) {
+      mileage = num;
+    }
+  }
+
+  // 4. Cost (Strict: null if absent)
   let cost = null;
   const grandTotalMatch = combined.match(/(?:grand total|total amount|final amount|net amount|amount payable|invoice total)[\s\S]{0,40}?(?:₹|INR|Rs\.?|\$)?\s*([\d,]+(?:\.\d{1,2})?)/i);
   if (grandTotalMatch) {
@@ -234,17 +233,7 @@ function understandDocumentContent(docText, fileName = '', componentName = '', c
     }
   }
 
-  // Mileage (Strict: null if absent, never guess or invent)
-  let mileage = null;
-  const mileageMatch = combined.match(/(?:mileage|odometer|odo|kms?|km reading)[\s\S]{0,30}?([\d,]{4,7})\s*(?:km|kms)?/i);
-  if (mileageMatch) {
-    const num = parseInt(mileageMatch[1].replace(/,/g, ''), 10);
-    if (!isNaN(num) && num > 0 && num < 1000000) {
-      mileage = num;
-    }
-  }
-
-  // Service Center / Workshop (Strict: null if absent)
+  // 5. Service Center / Workshop (Strict: null if absent)
   let serviceCenter = null;
   for (const line of lines) {
     if (/(service center|service centre|service plaza|workshop|garage|auto care|tyre care|motors|automotive|dealership|body shop|bosch|mrf|autoglass)/i.test(line)) {
@@ -258,18 +247,13 @@ function understandDocumentContent(docText, fileName = '', componentName = '', c
     }
   }
 
-  // Parts / Work Performed
+  // 6. Parts / Work Performed
   let parts = null;
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+  for (const line of lines) {
     if (/\.(pdf|png|jpe?g|webp)$/i.test(line.trim())) continue;
     if (/(tail lamp|taillight|tail light|headlight|headlamp|lamp assy|lamp|tyre|tire|windshield|glass|bumper|mirror|brake|bulb|assembly|fitting)/i.test(line)) {
       if (!line.toLowerCase().startsWith('invoice') && !line.toLowerCase().startsWith('date') && !line.toLowerCase().startsWith('total') && !line.toLowerCase().startsWith('customer')) {
-        let fullPartLine = line.replace(/^[#\-*\d\.\s]+/, '').split(/[₹|]/)[0].trim();
-        if (fullPartLine.includes('(') && !fullPartLine.includes(')') && i + 1 < lines.length) {
-          fullPartLine += ' ' + lines[i + 1].trim();
-        }
-        parts = fullPartLine;
+        parts = line.replace(/^[#\-*\d\.\s]+/, '').split(/[₹|]/)[0].trim();
         break;
       }
     }
@@ -282,10 +266,9 @@ function understandDocumentContent(docText, fileName = '', componentName = '', c
     else if (componentName) parts = `${componentName} Service`;
   }
 
-  // Description
+  // 7. Description
   let description = null;
   for (const line of lines) {
-    if (/^[A-Z]\.\s/i.test(line) || /PARTS\s*&\s*CONSUMABLES/i.test(line)) continue;
     if (/(removal & refit|r&r|replacement|repair|installation|servicing)/i.test(line)) {
       if (!line.toLowerCase().startsWith('invoice') && !line.toLowerCase().startsWith('date') && !line.toLowerCase().startsWith('total') && !line.toLowerCase().startsWith('subtotal')) {
         description = line.replace(/^[#\-*\d\.\s]+/, '').trim();
@@ -303,14 +286,14 @@ function understandDocumentContent(docText, fileName = '', componentName = '', c
     }
   }
 
-  // Warranty
+  // 8. Warranty
   let warranty = null;
   const warrantyMatch = combined.match(/(\d+[\s-]*(?:years?|months?)\s+(?:limited\s+|manufacturer\s+)?warranty)/i);
   if (warrantyMatch) {
     warranty = warrantyMatch[1].trim();
   }
 
-  // Component Match Verification
+  // 9. Component Match Verification
   let isMatch = true;
   let warning = null;
   const compLower = (componentName || '').toLowerCase();
@@ -362,195 +345,9 @@ function understandDocumentContent(docText, fileName = '', componentName = '', c
   };
 }
 
-/**
- * Modular Vite dev server middleware for AI document extraction.
- */
-function aiDocumentExtractionPlugin(env) {
-  return {
-    name: 'ai-document-extraction',
-    configureServer(server) {
-      server.middlewares.use('/api/extract-document', async (req, res, next) => {
-        if (req.method !== 'POST') return next();
-
-        let body = '';
-        req.on('data', (chunk) => {
-          body += chunk;
-        });
-
-        req.on('end', async () => {
-          try {
-            const { fileName, mimeType, fileBase64, componentName, componentId } = JSON.parse(body);
-
-            // Sanitize MIME type for Gemini
-            let resolvedMimeType = mimeType;
-            if (!resolvedMimeType || resolvedMimeType === 'application/octet-stream') {
-              const ext = (fileName || '').toLowerCase().split('.').pop();
-              if (ext === 'pdf') resolvedMimeType = 'application/pdf';
-              else if (ext === 'png') resolvedMimeType = 'image/png';
-              else if (ext === 'jpg' || ext === 'jpeg') resolvedMimeType = 'image/jpeg';
-              else if (ext === 'webp') resolvedMimeType = 'image/webp';
-              else resolvedMimeType = 'application/pdf';
-            }
-
-            const apiKey = env.GEMINI_API_KEY || env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-
-            console.log(`[AI Extract] Request: file="${fileName}", mime="${resolvedMimeType}", component="${componentName}", hasApiKey=${!!apiKey}`);
-
-            if (apiKey && fileBase64) {
-              try {
-                const prompt = `You are an expert document understanding AI specializing in automotive records and invoices.
-Analyze the provided document (PDF or image) in ONE unified document-understanding pass:
-
-1. DOCUMENT CLASSIFICATION:
-Determine whether this document is a vehicle-related service, maintenance, repair, parts, or inspection document.
-Evidence includes: vehicle make/model (e.g. Hyundai, Eon, Maruti, etc.), registration/vehicle number, workshop/garage/service center, automotive parts (tail light, lamp, headlight, tyre, battery, brake, windshield, engine, bumper, etc.), service activities (replacement, repair, maintenance, periodic service, inspection, labor charges), or automotive invoice terminology.
-Note: The document does NOT need to follow a standard invoice template. Even a simple bill, receipt, or job card with vehicle/service details is valid (for example: "Hyundai Eon, Tail Lamp Replacement, 19 September 2026, ₹4,850").
-
-If the document is NOT a vehicle-related document (e.g. school marksheet, academic certificate, leaving certificate, diploma, curriculum vitae, resume, medical bill, utility receipt):
-- Set "isVehicleDocument": false
-- Set "documentType": name the identified document type (e.g. "Academic certificate", "Curriculum Vitae / Resume", "Utility bill", "Unrelated document")
-- Set "reason": clear brief explanation (e.g. "The document contains academic information and no vehicle/service information." or "The document contains curriculum vitae / resume information and no vehicle/service information.")
-- Set "fields": null
-
-2. STRICT FIELD EXTRACTION (Only if isVehicleDocument is true):
-Extract ONLY information explicitly visible and stated in the document.
-CRITICAL ANTI-HALLUCINATION RULES:
-- Only extract information explicitly present in the document.
-- Never guess, estimate, infer missing numbers, invent mileage, invent cost, invent dates, or invent service centers.
-- If mileage is not explicitly mentioned in the document, set "mileage": null.
-- If cost is not explicitly mentioned, set "cost": null.
-- If date is not explicitly mentioned, set "date": null.
-- If serviceCenter is not explicitly mentioned, set "serviceCenter": null.
-- If serviceType is not clear, set "serviceType": null.
-- If warranty is not mentioned, set "warranty": null.
-- Check if the document relates to the currently selected component: "${componentName}". If it clearly relates to a different component, set componentMatch.isMatch = false and explain in componentMatch.warning.
-
-Return ONLY a valid JSON object with this exact schema:
-{
-  "isVehicleDocument": boolean,
-  "documentType": string,
-  "reason": string,
-  "fields": {
-    "serviceType": "Replacement" | "Inspection" | "Repair" | "Maintenance" | null,
-    "date": "YYYY-MM-DD" | null,
-    "mileage": number | null,
-    "cost": number | null,
-    "serviceCenter": string | null,
-    "parts": string | null,
-    "description": string | null,
-    "warranty": string | null
-  } | null,
-  "componentMatch": {
-    "isMatch": boolean,
-    "warning": string | null
-  }
-}`;
-
-                const geminiRes = await fetch(
-                  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-                  {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      contents: [
-                        {
-                          parts: [
-                            { text: prompt },
-                            {
-                              inlineData: {
-                                mimeType: resolvedMimeType,
-                                data: fileBase64
-                              }
-                            }
-                          ]
-                        }
-                      ],
-                      generationConfig: {
-                        responseMimeType: 'application/json'
-                      }
-                    })
-                  }
-                );
-
-                if (geminiRes.ok) {
-                  const geminiData = await geminiRes.json();
-                  const rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
-                  if (rawText) {
-                    console.log('[AI Extract] Raw Gemini response (before transformation):', rawText);
-                    const parsed = JSON.parse(rawText);
-                    if (parsed.fields) {
-                      if (typeof parsed.fields.cost === 'string') {
-                        const num = parseFloat(parsed.fields.cost.replace(/[^0-9.]/g, ''));
-                        parsed.fields.cost = isNaN(num) ? null : num;
-                      }
-                      if (typeof parsed.fields.mileage === 'string') {
-                        const num = parseInt(parsed.fields.mileage.replace(/[^0-9]/g, ''), 10);
-                        parsed.fields.mileage = isNaN(num) ? null : num;
-                      }
-                      if (parsed.fields.parts && !parsed.fields.partsOrWork) {
-                        parsed.fields.partsOrWork = parsed.fields.parts;
-                      }
-                    }
-                    console.log('[AI Extract] Gemini 1.5 Flash successful extraction:', parsed);
-                    res.setHeader('Content-Type', 'application/json');
-                    return res.end(JSON.stringify({ ...parsed, engine: 'gemini-1.5-flash', rawGeminiResponse: rawText }));
-                  }
-                } else {
-                  const errText = await geminiRes.text();
-                  console.warn(`[AI Extract] Gemini API call failed (HTTP ${geminiRes.status}):`, errText);
-                }
-              } catch (geminiErr) {
-                console.warn('[AI Extract] Gemini API call error, falling back to local extractor:', geminiErr.message);
-              }
-            }
-
-            // Local fallback & direct buffer extraction
-            let docText = '';
-            if (fileBase64) {
-              try {
-                const buffer = Buffer.from(fileBase64, 'base64');
-                const header = buffer.subarray(0, 5).toString('latin1');
-                if (header.startsWith('%PDF') || resolvedMimeType === 'application/pdf') {
-                  docText = extractTextFromPDFBuffer(buffer);
-                }
-              } catch (bufErr) {
-                console.warn('[AI Extract] Buffer text parse warning:', bufErr.message);
-              }
-            }
-
-            // ONE unified document-understanding pass
-            const result = understandDocumentContent(docText, fileName, componentName, componentId);
-
-            res.setHeader('Content-Type', 'application/json');
-            return res.end(
-              JSON.stringify({
-                ...result,
-                engine: 'fallback'
-              })
-            );
-          } catch (err) {
-            console.error('[AI Extract] Server error:', err);
-            res.statusCode = 500;
-            res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ error: err.message }));
-          }
-        });
-      });
-    }
-  };
-}
-
-// https://vitejs.dev/config/
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '');
-
-  return {
-    plugins: [react(), aiDocumentExtractionPlugin(env)],
-    server: {
-      port: 3000,
-      open: false
-    },
-    assetsInclude: ['**/*.glb', '**/*.gltf']
-  };
-});
-
+const pdfPath = 'C:/Users/pande/OneDrive/Desktop/vashisth/misc/devengers/hyundai_eon_taillight_invoice.pdf';
+const buf = fs.readFileSync(pdfPath);
+const text = extractTextFromPDFBuffer(buf);
+console.log('Extracted text length:', text.length);
+const result = understandDocumentContent(text, 'hyundai_eon_taillight_invoice.pdf', 'Taillight', 'tail-light');
+console.log('UNDERSTOOD RESULT:', JSON.stringify(result, null, 2));
