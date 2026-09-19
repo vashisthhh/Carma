@@ -500,4 +500,115 @@ export function getAllComponents() {
   }));
 }
 
+/**
+ * Completely reset all service history and component display names to default state.
+ */
+export function resetServiceHistoryData() {
+  const initialComponents = {
+    'tail-light': {
+      componentId: 'tail-light',
+      displayName: 'Tail Light',
+      aliases: ['tail light', 'taillight', 'tail-light', 'Rear Combination Lamp', 'Tail Lamp', 'tail-lamp'],
+      records: []
+    },
+    'rear-glass': {
+      componentId: 'rear-glass',
+      displayName: 'Back Glass',
+      aliases: ['Rear Glass', 'back-glass', 'Rear Glass besel', 'back glass', 'windshield'],
+      records: []
+    },
+    'tyre-front-right': {
+      componentId: 'tyre-front-right',
+      displayName: 'Front Right Tyre',
+      aliases: ['tyre-front-right', 'Right Front Tyre', 'front-right-tyre', 'front right tyre'],
+      records: []
+    },
+    'tyre-front-left': {
+      componentId: 'tyre-front-left',
+      displayName: 'Front Left Tyre',
+      aliases: ['tyre-front-left', 'Left Front Tyre', 'front-left-tyre', 'front left tyre'],
+      records: []
+    },
+    'tyre-rear-right': {
+      componentId: 'tyre-rear-right',
+      displayName: 'Rear Right Tyre',
+      aliases: ['tyre-rear-right', 'Right Rear Tyre', 'rear-right-tyre', 'rear right tyre'],
+      records: []
+    },
+    'tyre-rear-left': {
+      componentId: 'tyre-rear-left',
+      displayName: 'Rear Left Tyre',
+      aliases: ['tyre-rear-left', 'Left Rear Tyre', 'rear-left-tyre', 'rear left tyre'],
+      records: []
+    },
+    'headlight-right': {
+      componentId: 'headlight-right',
+      displayName: 'Right Headlight',
+      aliases: [
+        'Headlight Glass',
+        'Headlight Reflector',
+        'Headlight Bulb',
+        'Headlight Bulb Ind',
+        'headlight-right',
+        'Right Headlight',
+        'right headlight'
+      ],
+      records: []
+    },
+    'headlight-left': {
+      componentId: 'headlight-left',
+      displayName: 'Left Headlight',
+      aliases: ['headlight-left', 'Left Headlight', 'left headlight'],
+      records: []
+    },
+    'steering': {
+      componentId: 'steering',
+      displayName: 'Steering',
+      aliases: ['Steering', 'Steering column', 'hyundai logo steering', 'steering'],
+      records: []
+    },
+    'seat-front': {
+      componentId: 'seat-front',
+      displayName: 'Front Seat',
+      aliases: ['Seat Front', 'Front Seat', 'seat-front', 'front seat'],
+      records: []
+    },
+    'boot-lock': {
+      componentId: 'boot-lock',
+      displayName: 'Boot Lock',
+      aliases: ['Boot Lock', 'boot-lock', 'boot lock'],
+      records: []
+    },
+    'general-maintenance': {
+      componentId: 'general-maintenance',
+      displayName: 'General Maintenance',
+      aliases: ['general maintenance', 'periodic maintenance', 'service', 'general service', 'maintenance'],
+      records: []
+    }
+  };
+
+  VEHICLE_SERVICE_DATA.components = initialComponents;
+
+  const defaultNames = {
+    'tail-light': 'Tail Light',
+    'tyre-front-right': 'Front Right Tyre',
+    'tyre-front-left': 'Front Left Tyre',
+    'tyre-rear-right': 'Rear Right Tyre',
+    'tyre-rear-left': 'Rear Left Tyre',
+    'headlight-right': 'Right Headlight',
+    'headlight-left': 'Left Headlight',
+    'rear-glass': 'Back Glass',
+    'steering': 'Steering',
+    'seat-front': 'Front Seat',
+    'boot-lock': 'Boot Lock',
+    'general-maintenance': 'General Maintenance'
+  };
+
+  for (const comp of SUPPORTED_COMPONENTS) {
+    if (defaultNames[comp.id]) {
+      comp.name = defaultNames[comp.id];
+    }
+  }
+}
+
 

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { CarViewer } from './components/CarViewer';
 import { DebugPanel } from './components/DebugPanel';
 import { InspectionPanel } from './components/InspectionPanel';
@@ -7,23 +7,73 @@ import { DocumentImportModal } from './components/DocumentImportModal';
 import { AddServiceRecordModal } from './components/AddServiceRecordModal';
 import { DeleteConfirmationModal } from './components/DeleteConfirmationModal';
 import { RenameComponentModal } from './components/RenameComponentModal';
-import { VEHICLES, getDefaultVehicle, getVehicleById } from './data/vehicleData';
+import { Onboarding } from './components/Onboarding';
+import {
+  VEHICLES,
+  DEFAULT_VEHICLE_ID,
+  getDefaultVehicle,
+  getVehicleById,
+  getStoredVehicle,
+  saveStoredVehicle,
+  resetVehicleData
+} from './data/vehicleData';
 import { getInspectionConfig, calculateCameraFraming } from './config/inspectionConfig';
 import {
   updateServiceRecord,
   deleteServiceRecord,
   renameComponent,
   clearComponentHistory,
-  getComponentDisplayName
+  getComponentDisplayName,
+  resetServiceHistoryData
 } from './data/serviceHistoryData';
-import { Car, MousePointer, RotateCw, ZoomIn, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import {
+  Car,
+  MousePointer,
+  RotateCw,
+  RotateCcw,
+  ZoomIn,
+  ArrowLeft,
+  CheckCircle2,
+  LogOut,
+  AlertTriangle,
+  ChevronDown,
+  Edit3
+} from 'lucide-react';
 
 export default function App() {
   const containerRef = useRef(null);
+  const userMenuRef = useRef(null);
+
+  // Authentication & Session State
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return localStorage.getItem('carma_auth_session') === 'authenticated';
+  });
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [hasInteractedWith3D, setHasInteractedWith3D] = useState(false);
+
+  // Close user dropdown menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
+        setShowUserMenu(false);
+      }
+    }
+    if (showUserMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showUserMenu]);
+
+  // Vehicle Profile & Onboarding State
+  const [vehicleProfile, setVehicleProfile] = useState(() => getStoredVehicle());
+  const [isEditingVehicle, setIsEditingVehicle] = useState(false);
+
 
   // Vehicle State (Generic Vehicle-Agnostic Model)
   const [currentVehicleId, setCurrentVehicleId] = useState(VEHICLES[0].id);
-  const currentVehicle = getVehicleById(currentVehicleId);
+  const currentVehicle = vehicleProfile || getVehicleById(currentVehicleId);
 
   // Dynamic Records Version Tracker (triggers re-render when records change)
   const [recordsVersion, setRecordsVersion] = useState(0);
@@ -69,6 +119,7 @@ export default function App() {
     setActiveInspectionConfig(config);
     setInspectionCameraFocus(cameraFraming);
     setShowHierarchyInInspection(false);
+    setHasInteractedWith3D(true);
 
     console.log(
       '%c🔍 [Entering Component Inspection Mode]',
@@ -120,6 +171,7 @@ export default function App() {
   // When a mesh is clicked in the 3D viewport
   const handleSelectMesh = useCallback((mesh) => {
     setSelectedMesh(mesh);
+    setHasInteractedWith3D(true);
   }, []);
 
   // When a node is clicked in the Debug Panel
@@ -179,12 +231,14 @@ export default function App() {
   }, [handleInspectComponentFromWorkspace]);
 
   // When a vehicle statutory document is saved
-  const handleVehicleDocumentSaved = useCallback((savedDoc, category) => {
+  const handleVehicleDocumentSaved = useCallback((savedDoc, category, updatedVehicle) => {
+    const latest = updatedVehicle || getStoredVehicle() || getVehicleById(currentVehicleId);
+    setVehicleProfile({ ...latest });
     setRecordsVersion((v) => v + 1);
     const docName = category === 'puc' ? 'PUC' : 'Insurance';
     setToastMessage(`${docName} document verified and saved.`);
     setTimeout(() => setToastMessage(null), 3500);
-  }, []);
+  }, [currentVehicleId]);
 
   // Data Management Handlers (Edit, Delete, Rename, Clear History)
   const handleEditRecord = useCallback((record) => {
@@ -240,6 +294,75 @@ export default function App() {
     setTimeout(() => setToastMessage(null), 3000);
   }, []);
 
+  const handleOnboardingComplete = useCallback((data) => {
+    const saved = saveStoredVehicle(data);
+    setVehicleProfile(saved);
+    localStorage.setItem('carma_auth_session', 'authenticated');
+    setIsAuthenticated(true);
+    setToastMessage(`Welcome to your ${saved.make} ${saved.model} workspace!`);
+    setTimeout(() => setToastMessage(null), 3500);
+  }, []);
+
+  const handleLogin = useCallback(() => {
+    localStorage.setItem('carma_auth_session', 'authenticated');
+    setIsAuthenticated(true);
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    localStorage.removeItem('carma_auth_session');
+    setIsAuthenticated(false);
+    setShowLogoutConfirm(false);
+    setActiveInspectionConfig(null);
+    setToastMessage('Logged out successfully.');
+    setTimeout(() => setToastMessage(null), 3000);
+  }, []);
+
+  const handleResetDemo = useCallback(() => {
+    // 1. Clear persisted client-side stores
+    resetVehicleData();
+    resetServiceHistoryData();
+    localStorage.removeItem('carma_auth_session');
+    localStorage.removeItem('carma_vehicle_profile');
+
+    // 2. Reset in-memory application state
+    setVehicleProfile(null);
+    setIsAuthenticated(false);
+    setShowResetConfirm(false);
+    setShowLogoutConfirm(false);
+    setActiveInspectionConfig(null);
+    setSelectedMesh(null);
+    setEditingRecord(null);
+    setDeletingRecord(null);
+    setRenamingComponent(null);
+    setCurrentVehicleId(DEFAULT_VEHICLE_ID);
+    setRecordsVersion((v) => v + 1);
+
+    // 3. User feedback
+    setToastMessage('Demo reset to initial setup state.');
+    setTimeout(() => setToastMessage(null), 3500);
+  }, []);
+
+  const handleSaveVehicleEdit = useCallback((data) => {
+    const saved = saveStoredVehicle(data);
+    setVehicleProfile(saved);
+    setIsEditingVehicle(false);
+    setToastMessage('Vehicle details updated.');
+    setTimeout(() => setToastMessage(null), 3500);
+  }, []);
+
+  // Protected Route Gate: If user is not authenticated, show Welcome / Login screen
+  if (!isAuthenticated) {
+    return (
+      <Onboarding
+        initialStep="welcome"
+        hasExistingVehicle={Boolean(vehicleProfile)}
+        existingVehicleData={vehicleProfile}
+        onLogin={handleLogin}
+        onComplete={handleOnboardingComplete}
+      />
+    );
+  }
+
   return (
     <div className="app-workspace-page" ref={containerRef}>
       {/* Sticky Top Navigation Bar */}
@@ -249,41 +372,163 @@ export default function App() {
             <Car size={18} color="#38bdf8" />
           </div>
           <div className="navbar-brand-text">
-            <span className="navbar-brand-title">Carma</span>
-            <span className="navbar-brand-sub">Vehicle Workspace</span>
+            <span className="navbar-brand-title">CARMA</span>
+            <span className="navbar-brand-sub">DIGITAL COCKPIT</span>
           </div>
         </div>
 
-        <div className="navbar-center-info">
-          <span className="badge badge-vehicle-active">
-            {currentVehicle.make} {currentVehicle.model} ({currentVehicle.year})
-          </span>
-          <span className="badge badge-reg-muted">{currentVehicle.registrationNumber}</span>
+        <div className="navbar-actions-right">
+          <div className="user-menu-wrapper" ref={userMenuRef}>
+            <button
+              type="button"
+              className="btn-user-profile"
+              onClick={() => setShowUserMenu(!showUserMenu)}
+              aria-expanded={showUserMenu}
+            >
+              <div className="user-avatar-dot"></div>
+              <span className="user-vehicle-label">
+                {currentVehicle?.ownerName ? `${currentVehicle.ownerName}'s ` : ''}
+                {currentVehicle?.make} {currentVehicle?.model}
+              </span>
+              <ChevronDown size={14} className={`user-menu-chevron ${showUserMenu ? 'open' : ''}`} />
+            </button>
+
+            {showUserMenu && (
+              <div className="user-dropdown-menu">
+                <div className="user-dropdown-header">
+                  <span className="dropdown-owner-name">{currentVehicle?.ownerName || 'Vehicle Owner'}</span>
+                  <span className="dropdown-vehicle-info">{currentVehicle?.make} {currentVehicle?.model} ({currentVehicle?.year})</span>
+                  {currentVehicle?.registrationNumber && (
+                    <span className="dropdown-reg-badge">{currentVehicle.registrationNumber}</span>
+                  )}
+                </div>
+                <div className="user-dropdown-divider"></div>
+                <button
+                  type="button"
+                  className="user-dropdown-item"
+                  onClick={() => {
+                    setShowUserMenu(false);
+                    setIsEditingVehicle(true);
+                  }}
+                >
+                  <Edit3 size={14} />
+                  <span>Edit Vehicle Details</span>
+                </button>
+                <button
+                  type="button"
+                  className="user-dropdown-item"
+                  onClick={() => {
+                    setShowUserMenu(false);
+                    setShowResetConfirm(true);
+                  }}
+                >
+                  <RotateCcw size={14} />
+                  <span>Reset Demo</span>
+                </button>
+                <div className="user-dropdown-divider"></div>
+                <button
+                  type="button"
+                  className="user-dropdown-item dropdown-item-logout"
+                  onClick={() => {
+                    setShowUserMenu(false);
+                    setShowLogoutConfirm(true);
+                  }}
+                >
+                  <LogOut size={14} />
+                  <span>Log out</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
       {/* SECTION 1: HERO PRIMARY AREA — 3D VEHICLE */}
       <section className="hero-3d-section">
+        {/* Vehicle Identity Header immediately above 3D */}
+        <div className="hero-vehicle-identity">
+          <div className="identity-title-row">
+            <h1 className="hero-vehicle-name">
+              {currentVehicle?.make} {currentVehicle?.model}
+            </h1>
+            {currentVehicle?.variant && (
+              <span className="hero-vehicle-variant">{currentVehicle.variant}</span>
+            )}
+          </div>
+          <div className="hero-specs-row">
+            <span className="spec-item">{currentVehicle?.year}</span>
+            <span className="spec-bullet">·</span>
+            <span className="spec-item">
+              {currentVehicle?.odometer ? currentVehicle.odometer.toLocaleString('en-IN') : '0'} km
+            </span>
+            {currentVehicle?.registrationNumber && (
+              <>
+                <span className="spec-bullet">·</span>
+                <span className="spec-reg">{currentVehicle.registrationNumber}</span>
+              </>
+            )}
+            <button
+              type="button"
+              className="btn-hero-edit-vehicle"
+              onClick={() => setIsEditingVehicle(true)}
+              title="Edit vehicle details"
+            >
+              <Edit3 size={11} />
+              <span>Edit</span>
+            </button>
+          </div>
+        </div>
+
         {/* Loading Screen for 3D Asset */}
-        {isLoading && (
+        {isLoading && currentVehicle?.modelPath && (
           <div className="loading-screen">
             <div className="spinner"></div>
             <div className="loading-text">
-              Loading {currentVehicle.make} {currentVehicle.model} 3D Model...
+              Loading {currentVehicle?.make} {currentVehicle?.model} 3D Model...
             </div>
           </div>
         )}
 
         {/* 3D Canvas Viewport */}
         <div className="hero-3d-canvas-container">
-          <CarViewer
-            onLoaded={handleLoaded}
-            onSelectMesh={handleSelectMesh}
-            selectedMesh={selectedMesh}
-            inspectionConfig={activeInspectionConfig}
-            inspectionCameraFocus={inspectionCameraFocus}
-            onEnterInspection={handleEnterInspection}
-          />
+          {currentVehicle?.modelPath ? (
+            <CarViewer
+              onLoaded={handleLoaded}
+              onSelectMesh={handleSelectMesh}
+              selectedMesh={selectedMesh}
+              inspectionConfig={activeInspectionConfig}
+              inspectionCameraFocus={inspectionCameraFocus}
+              onEnterInspection={handleEnterInspection}
+            />
+          ) : (
+            <div className="no-3d-fallback">
+              <div className="fallback-card">
+                <Car size={36} color="#64748b" />
+                <h3>3D Model Not Available</h3>
+                <p>
+                  Interactive 3D model is currently available for the <strong>Hyundai Eon</strong> demo.
+                  Your vehicle workspace, records, and documents for <strong>{currentVehicle?.make} {currentVehicle?.model}</strong> are fully functional below.
+                </p>
+                <button
+                  type="button"
+                  className="btn-switch-demo"
+                  onClick={() => {
+                    const demo = saveStoredVehicle({
+                      ownerName: currentVehicle?.ownerName || 'Vashisth',
+                      make: 'Hyundai',
+                      model: 'Eon',
+                      year: 2019,
+                      odometer: 61240,
+                      registrationNumber: 'MH-01-AB-1234'
+                    });
+                    setVehicleProfile(demo);
+                  }}
+                >
+                  Switch to Hyundai Eon Demo
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Inspection Mode Status Overlay / Back to Vehicle Button */}
@@ -299,12 +544,13 @@ export default function App() {
             </button>
           </div>
         ) : (
-          <div className="hero-interaction-hint">
+          <div className={`hero-interaction-hint ${hasInteractedWith3D ? 'hint-dimmed' : ''}`}>
             <span className="hint-pill">
-              Click any component to inspect history & records
+              Select a component to inspect its history
             </span>
           </div>
         )}
+
 
         {/* Inspection Panel (Slides in on right when a component is inspected) */}
         {activeInspectionConfig && !showHierarchyInInspection && (
@@ -362,7 +608,18 @@ export default function App() {
         onDeleteRecord={handleDeleteRecord}
         onRenameComponent={handleRenameComponent}
         onClearHistory={handleClearHistory}
+        onEditVehicle={() => setIsEditingVehicle(true)}
       />
+
+      {/* Edit Vehicle Details Modal */}
+      {isEditingVehicle && (
+        <Onboarding
+          isEditMode={true}
+          initialData={currentVehicle}
+          onComplete={handleSaveVehicleEdit}
+          onCancel={() => setIsEditingVehicle(false)}
+        />
+      )}
 
       {/* Unified Document Ingestion Modal (Service Records & Statutory Vehicle Documents) */}
       <DocumentImportModal
@@ -370,6 +627,7 @@ export default function App() {
         context={importModalConfig.context}
         documentCategory={importModalConfig.documentCategory}
         defaultComponentId={importModalConfig.componentId}
+        vehicleId={currentVehicle?.id}
         onClose={() => setImportModalConfig((prev) => ({ ...prev, isOpen: false }))}
         onRecordSaved={handleRecordSaved}
         onVehicleDocumentSaved={handleVehicleDocumentSaved}
@@ -406,6 +664,78 @@ export default function App() {
           onClose={() => setRenamingComponent(null)}
           onSave={handleSaveRenamedComponent}
         />
+      )}
+
+      {/* Logout Confirmation Modal */}
+      {showLogoutConfirm && (
+        <div className="overview-modal-overlay" onClick={() => setShowLogoutConfirm(false)}>
+          <div className="logout-confirm-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="logout-modal-header">
+              <div className="logout-icon-wrap">
+                <LogOut size={18} color="#f59e0b" />
+              </div>
+              <div>
+                <h3 className="logout-modal-title">Log out?</h3>
+                <p className="logout-modal-subtitle">
+                  You can sign back in anytime. Your vehicle history and documents will remain saved.
+                </p>
+              </div>
+            </div>
+            <div className="logout-modal-actions">
+              <button
+                type="button"
+                className="btn-modal-cancel"
+                onClick={() => setShowLogoutConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-logout-confirm"
+                onClick={handleLogout}
+              >
+                <LogOut size={13} />
+                <span>Log out</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Demo Confirmation Modal */}
+      {showResetConfirm && (
+        <div className="overview-modal-overlay" onClick={() => setShowResetConfirm(false)}>
+          <div className="reset-confirm-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="reset-modal-header">
+              <div className="reset-icon-wrap">
+                <AlertTriangle size={18} color="#ef4444" />
+              </div>
+              <div>
+                <h3 className="reset-modal-title">Reset demo?</h3>
+                <p className="reset-modal-subtitle">
+                  This will remove the current vehicle profile, service history, documents and vehicle information and return the app to its initial setup state.
+                </p>
+              </div>
+            </div>
+            <div className="reset-modal-actions">
+              <button
+                type="button"
+                className="btn-modal-cancel"
+                onClick={() => setShowResetConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-reset-demo-confirm"
+                onClick={handleResetDemo}
+              >
+                <RotateCcw size={13} />
+                <span>Reset Demo</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Global Toast Notification */}

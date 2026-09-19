@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Calendar,
   Gauge,
@@ -70,7 +70,8 @@ export function VehicleWorkspace({
   onDeleteRecord,
   onRenameComponent,
   onClearHistory,
-  onOpenVehicleDocUpload
+  onOpenVehicleDocUpload,
+  onEditVehicle
 }) {
   const [activeMenuCompId, setActiveMenuCompId] = useState(null);
 
@@ -78,67 +79,253 @@ export function VehicleWorkspace({
   const summary = getVehicleServiceSummary(vehicle?.id);
   const { totalRecords, documentCount, totalSpend, records } = summary;
 
+  // Group records by year in descending order
+  const recordsByYear = useMemo(() => {
+    const groups = {};
+    records.forEach((rec) => {
+      const year = rec.date ? rec.date.split('-')[0] : 'Other';
+      if (!groups[year]) groups[year] = [];
+      groups[year].push(rec);
+    });
+    return Object.keys(groups)
+      .sort((a, b) => b.localeCompare(a))
+      .map((year) => ({
+        year,
+        records: groups[year]
+      }));
+  }, [records]);
+
   // Extract all records that have an attached document
   const serviceDocuments = records.filter((r) => Boolean(r.document));
 
   // Registered components list with live names and record counts
   const componentsList = getAllComponents();
 
+  // Insurance and PUC status using existing dynamic expiry calculation
+  const insuranceDoc = (vehicle?.documents || []).find(
+    (d) => (d.type || '').toLowerCase() === 'insurance'
+  );
+  const insuranceStatus = insuranceDoc?.expiryDate
+    ? calculateExpiryStatus(insuranceDoc.expiryDate)
+    : (insuranceDoc ? calculateExpiryStatus(null) : null);
+
+  const pucDoc = (vehicle?.documents || []).find(
+    (d) => (d.type || '').toLowerCase() === 'puc'
+  );
+  const pucStatus = pucDoc?.expiryDate
+    ? calculateExpiryStatus(pucDoc.expiryDate)
+    : (pucDoc ? calculateExpiryStatus(null) : null);
+
+
   return (
     <section className="vehicle-workspace-container">
-      {/* 1. Vehicle Identity & Key Information */}
-      <div className="workspace-vehicle-header">
-        <div className="workspace-title-row">
-          <div className="workspace-title-left">
-            <div className="vehicle-badges-row">
-              <span className="badge-make">{vehicle.make}</span>
-              <span className="badge-reg">{vehicle.registrationNumber}</span>
-            </div>
-            <h1 className="workspace-vehicle-name">
-              {vehicle.make} {vehicle.model}
-              {vehicle.variant ? <span className="workspace-variant"> {vehicle.variant}</span> : null}
-            </h1>
-            <div className="workspace-specs-row">
-              <span>{vehicle.year}</span>
-              <span className="spec-dot">·</span>
-              <span>{vehicle.odometer.toLocaleString('en-IN')} km</span>
-              <span className="spec-dot">·</span>
-              <span>{vehicle.fuelType}</span>
-              <span className="spec-dot">·</span>
-              <span>{vehicle.transmission}</span>
-            </div>
+      {/* 1. Compact Vehicle Summary Strip (Specification/Status Strip) */}
+      <div className="workspace-summary-strip">
+        <div className="summary-metric-item">
+          <span className="summary-metric-label">DOCUMENTED SERVICES</span>
+          <span className="summary-metric-val">{totalRecords}</span>
+        </div>
+
+        <div className="summary-metric-divider"></div>
+
+        <div className="summary-metric-item">
+          <span className="summary-metric-label">DOCUMENTED SPEND</span>
+          <span className="summary-metric-val">₹{totalSpend.toLocaleString('en-IN')}</span>
+        </div>
+
+        <div className="summary-metric-divider"></div>
+
+        <div className="summary-metric-item">
+          <span className="summary-metric-label">SERVICE DOCUMENTS</span>
+          <span className="summary-metric-val">{documentCount}</span>
+        </div>
+
+        <div className="summary-metric-divider"></div>
+
+        <div className="summary-metric-item">
+          <span className="summary-metric-label">INSURANCE</span>
+          <div className="summary-status-content">
+            <span className={`summary-status-badge ${insuranceStatus ? insuranceStatus.badgeClass : 'status-none'}`}>
+              {insuranceStatus ? insuranceStatus.status : 'Not uploaded'}
+            </span>
+            {insuranceDoc && insuranceStatus?.daysUntilExpiry !== null && (
+              <span className="summary-status-sub">
+                {insuranceStatus.daysUntilExpiry > 0
+                  ? `${insuranceStatus.daysUntilExpiry} days remaining`
+                  : insuranceStatus.daysUntilExpiry === 0
+                  ? 'Expires today'
+                  : `Expired ${Math.abs(insuranceStatus.daysUntilExpiry)}d ago`}
+              </span>
+            )}
           </div>
         </div>
 
-        {/* Dynamic Metric Pills */}
-        <div className="workspace-metrics-row">
-          <div className="metric-pill">
-            <Wrench size={14} className="metric-icon metric-icon-records" />
-            <span className="metric-value">{totalRecords}</span>
-            <span className="metric-label">Documented Service Records</span>
-          </div>
+        <div className="summary-metric-divider"></div>
 
-          <div className="metric-pill">
-            <FileCheck2 size={14} className="metric-icon metric-icon-docs" />
-            <span className="metric-value">{documentCount}</span>
-            <span className="metric-label">Attached Documents</span>
-          </div>
-
-          <div className="metric-pill">
-            <IndianRupee size={14} className="metric-icon metric-icon-spend" />
-            <span className="metric-value">₹{totalSpend.toLocaleString('en-IN')}</span>
-            <span className="metric-label">Documented Spend</span>
+        <div className="summary-metric-item">
+          <span className="summary-metric-label">PUC</span>
+          <div className="summary-status-content">
+            <span className={`summary-status-badge ${pucStatus ? pucStatus.badgeClass : 'status-none'}`}>
+              {pucStatus ? pucStatus.status : 'Not uploaded'}
+            </span>
+            {pucDoc && pucStatus?.daysUntilExpiry !== null && (
+              <span className="summary-status-sub">
+                {pucStatus.daysUntilExpiry > 0
+                  ? `${pucStatus.daysUntilExpiry} days remaining`
+                  : pucStatus.daysUntilExpiry === 0
+                  ? 'Expires today'
+                  : `Expired ${Math.abs(pucStatus.daysUntilExpiry)}d ago`}
+              </span>
+            )}
           </div>
         </div>
       </div>
 
-      {/* 2. Service Documents Section (Dedicated Evidence/Source Files Category) */}
+      {/* 2. Service History Section (Vehicle Timeline) */}
+      <div className="workspace-section">
+        <div className="section-header-row">
+          <div>
+            <h2 className="workspace-section-title">SERVICE HISTORY</h2>
+            <span className="workspace-section-subtitle">
+              Chronological timeline of component maintenance, repair & replacement events
+            </span>
+          </div>
+          <button className="btn-secondary-action" onClick={onOpenAiImport}>
+            <Upload size={13} />
+            <span>Import Service Documents</span>
+          </button>
+        </div>
+
+        {records.length === 0 ? (
+          <div className="workspace-empty-state">
+            <div className="empty-icon-wrap">
+              <Wrench size={24} />
+            </div>
+            <h3 className="empty-state-title">No documented service history</h3>
+            <p className="empty-state-desc">
+              Your vehicle history will appear here as you add service records.
+            </p>
+            <button className="btn-secondary-action" onClick={onOpenAiImport}>
+              <Upload size={13} />
+              <span>Import Service Documents</span>
+            </button>
+          </div>
+        ) : (
+          <div className="vehicle-timeline-container">
+            {recordsByYear.map(({ year, records: yearRecords }) => (
+              <div key={`year-${year}`} className="timeline-year-group">
+                <div className="timeline-year-marker">
+                  <span className="timeline-year-text">{year}</span>
+                </div>
+
+                <div className="timeline-events-list">
+                  {yearRecords.map((record) => {
+                    const liveCompName = getComponentDisplayName(record.componentId);
+                    return (
+                      <div
+                        key={record.id}
+                        className="timeline-event-item"
+                        onClick={() => {
+                          if (onInspectComponent && record.componentId) {
+                            onInspectComponent(record.componentId);
+                          }
+                        }}
+                        title="Click to inspect component in 3D"
+                      >
+                        {/* Vertical timeline node */}
+                        <div className="timeline-node">
+                          <div className="timeline-node-dot"></div>
+                        </div>
+
+                        {/* Event Content Card */}
+                        <div className="timeline-event-body">
+                          <div className="timeline-event-header">
+                            <div className="timeline-event-main-title">
+                              <span className={`badge ${getServiceTypeBadgeClass(record.type)}`}>
+                                {record.type}
+                              </span>
+                              <span className="timeline-event-component">{liveCompName}</span>
+                            </div>
+                            <div className="timeline-event-actions" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                type="button"
+                                className="btn-timeline-action"
+                                onClick={() => onEditRecord && onEditRecord(record)}
+                                title="Edit service record"
+                              >
+                                <Edit3 size={12} />
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-timeline-action btn-timeline-delete"
+                                onClick={() => onDeleteRecord && onDeleteRecord(record)}
+                                title="Delete service record"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          </div>
+
+                          {record.description && (
+                            <p className="timeline-event-desc">{record.description}</p>
+                          )}
+
+                          <div className="timeline-event-footer">
+                            <div className="timeline-meta-group">
+                              <div className="timeline-meta-item">
+                                <Calendar size={12} />
+                                <span>{formatDate(record.date)}</span>
+                              </div>
+                              <span className="meta-bullet">·</span>
+                              <div className="timeline-meta-item">
+                                <Gauge size={12} />
+                                <span>{record.mileage ? `${record.mileage.toLocaleString('en-IN')} km` : '—'}</span>
+                              </div>
+                              {record.cost > 0 && (
+                                <>
+                                  <span className="meta-bullet">·</span>
+                                  <div className="timeline-meta-item meta-cost">
+                                    <IndianRupee size={12} />
+                                    <span>₹{record.cost.toLocaleString('en-IN')}</span>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+
+                            {record.document && (
+                              <div
+                                className="timeline-doc-indicator"
+                                onClick={(e) => {
+                                  if (record.document.url) {
+                                    e.stopPropagation();
+                                    window.open(record.document.url, '_blank');
+                                  }
+                                }}
+                                title={`Attached evidence: ${record.document.name}`}
+                              >
+                                <Paperclip size={11} />
+                                <span className="timeline-doc-name">{record.document.name}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* 3. Service Documents Section (Dedicated Evidence Category) */}
       <div className="workspace-section">
         <div className="section-header-row">
           <div>
             <h2 className="workspace-section-title">SERVICE DOCUMENTS</h2>
             <span className="workspace-section-subtitle">
-              Uploaded invoices, repair bills & maintenance receipts
+              Invoices and maintenance records associated with this vehicle.
             </span>
           </div>
           <button className="btn-primary-import" onClick={onOpenAiImport}>
@@ -152,9 +339,9 @@ export function VehicleWorkspace({
             <div className="empty-icon-wrap">
               <FileText size={24} />
             </div>
-            <h3 className="empty-state-title">No service documents uploaded yet.</h3>
+            <h3 className="empty-state-title">No service documents</h3>
             <p className="empty-state-desc">
-              Upload invoices or receipts to automatically extract service records and link them to vehicle components.
+              Upload invoices and maintenance records to build your documented history.
             </p>
             <button className="btn-primary-import" onClick={onOpenAiImport}>
               <Upload size={14} />
@@ -162,63 +349,50 @@ export function VehicleWorkspace({
             </button>
           </div>
         ) : (
-          <div className="service-documents-grid">
+          <div className="service-evidence-grid">
             {serviceDocuments.map((record) => {
               const liveCompName = getComponentDisplayName(record.componentId);
               return (
-                <div key={`doc-${record.id}`} className="service-doc-card">
-                  <div className="doc-card-main">
-                    <div className="doc-icon-badge">
-                      <FileText size={18} color="#38bdf8" />
-                    </div>
-                    <div className="doc-details">
-                      <span className="doc-filename" title={record.document.name}>
-                        {record.document.name}
-                      </span>
-                      <div className="doc-meta-row">
-                        <span>
-                          {record.document.size
-                            ? `${(record.document.size / 1024).toFixed(0)} KB`
-                            : 'Document'}
-                        </span>
-                        <span className="spec-dot">·</span>
-                        <span>{formatDate(record.date)}</span>
-                        <span className="spec-dot">·</span>
-                        <span className="doc-event-type">{record.type}</span>
-                      </div>
+                <div key={`doc-${record.id}`} className="evidence-card">
+                  <div className="evidence-header">
+                    <div className="evidence-title-group">
+                      <span className="evidence-type-tag">{record.type.toUpperCase()}</span>
+                      <span className="evidence-date">{formatDate(record.date)}</span>
                     </div>
                     {record.cost > 0 && (
-                      <div className="doc-cost-badge">
-                        <IndianRupee size={12} />
-                        <span>{record.cost.toLocaleString('en-IN')}</span>
-                      </div>
+                      <span className="evidence-cost">₹{record.cost.toLocaleString('en-IN')}</span>
                     )}
                   </div>
 
-                  <div className="doc-card-footer">
-                    <div className="doc-linked-component">
-                      <span className="linked-label">Component:</span>
-                      <button
-                        type="button"
-                        className="btn-linked-comp"
-                        onClick={() =>
-                          onInspectComponent && record.componentId && onInspectComponent(record.componentId)
-                        }
-                        title={`Inspect ${liveCompName} on 3D vehicle`}
-                      >
-                        <Layers size={12} />
-                        <span>{liveCompName}</span>
-                      </button>
+                  <div className="evidence-component-row">
+                    <span className="evidence-comp-label">Component:</span>
+                    <button
+                      type="button"
+                      className="btn-evidence-comp"
+                      onClick={() => onInspectComponent && record.componentId && onInspectComponent(record.componentId)}
+                      title={`Inspect ${liveCompName} in 3D`}
+                    >
+                      <Layers size={11} />
+                      <span>{liveCompName}</span>
+                    </button>
+                  </div>
+
+                  <div className="evidence-file-footer">
+                    <div className="evidence-file-info">
+                      <FileText size={14} className="file-icon" />
+                      <span className="file-name" title={record.document.name}>
+                        {record.document.name}
+                      </span>
                     </div>
 
-                    <div className="doc-actions-right">
+                    <div className="evidence-actions">
                       {record.document.url && (
                         <a
                           href={record.document.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="btn-view-document"
-                          title={`Open ${record.document.name}`}
+                          className="btn-view-evidence"
+                          title={`View ${record.document.name}`}
                         >
                           <ExternalLink size={12} />
                           <span>View</span>
@@ -226,21 +400,19 @@ export function VehicleWorkspace({
                       )}
                       <button
                         type="button"
-                        className="btn-inline-action"
+                        className="btn-evidence-action"
                         onClick={() => onEditRecord && onEditRecord(record)}
-                        title="Edit service record"
+                        title="Edit record"
                       >
                         <Edit3 size={12} />
-                        <span>Edit</span>
                       </button>
                       <button
                         type="button"
-                        className="btn-inline-action btn-inline-delete"
+                        className="btn-evidence-action btn-evidence-delete"
                         onClick={() => onDeleteRecord && onDeleteRecord(record)}
-                        title="Delete service record"
+                        title="Delete record"
                       >
                         <Trash2 size={12} />
-                        <span>Delete</span>
                       </button>
                     </div>
                   </div>
@@ -251,109 +423,7 @@ export function VehicleWorkspace({
         )}
       </div>
 
-      {/* 3. Service History Section (Structured Timeline of Records) */}
-      <div className="workspace-section">
-        <div className="section-header-row">
-          <div>
-            <h2 className="workspace-section-title">SERVICE HISTORY</h2>
-            <span className="workspace-section-subtitle">
-              Structured timeline of component maintenance, repair & replacement records
-            </span>
-          </div>
-        </div>
-
-        {records.length === 0 ? (
-          <div className="workspace-empty-state">
-            <div className="empty-icon-wrap">
-              <Wrench size={24} />
-            </div>
-            <h3 className="empty-state-title">No documented service history yet.</h3>
-            <p className="empty-state-desc">
-              This vehicle has 0 service records logged. Import service documents above to automatically populate records, or inspect components on the 3D model to log records manually.
-            </p>
-          </div>
-        ) : (
-          <div className="workspace-records-timeline">
-            {records.map((record) => {
-              const liveCompName = getComponentDisplayName(record.componentId);
-              return (
-                <div
-                  key={record.id}
-                  className="workspace-record-card"
-                  onClick={() => {
-                    if (onInspectComponent && record.componentId) {
-                      onInspectComponent(record.componentId);
-                    }
-                  }}
-                  title="Click to view component in 3D"
-                >
-                  <div className="record-top-row">
-                    <div className="record-top-left">
-                      <div className="record-date-block">
-                        <Calendar size={13} className="record-date-icon" />
-                        <span className="record-date-text">{formatDate(record.date)}</span>
-                      </div>
-                      <span className={`badge ${getServiceTypeBadgeClass(record.type)}`}>
-                        {record.type}
-                      </span>
-                    </div>
-
-                    <div className="record-actions-inline" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        className="btn-inline-action"
-                        onClick={() => onEditRecord && onEditRecord(record)}
-                        title="Edit service record"
-                      >
-                        <Edit3 size={12} />
-                        <span>Edit</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-inline-action btn-inline-delete"
-                        onClick={() => onDeleteRecord && onDeleteRecord(record)}
-                        title="Delete service record"
-                      >
-                        <Trash2 size={12} />
-                        <span>Delete</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="record-main-row">
-                    <span className="record-comp-name">{liveCompName}</span>
-                    {record.description && (
-                      <p className="record-desc-text">{record.description}</p>
-                    )}
-                  </div>
-
-                  <div className="record-bottom-row">
-                    <div className="record-tags-group">
-                      <div className="record-tag">
-                        <Gauge size={12} />
-                        <span>{record.mileage ? `${record.mileage.toLocaleString('en-IN')} km` : '—'}</span>
-                      </div>
-                      <div className="record-tag record-cost-tag">
-                        <IndianRupee size={12} />
-                        <span>{record.cost ? `₹${record.cost.toLocaleString('en-IN')}` : '—'}</span>
-                      </div>
-                    </div>
-
-                    {record.document && (
-                      <div className="record-doc-badge" title={`Attached: ${record.document.name}`}>
-                        <Paperclip size={12} />
-                        <span className="doc-name-text">{record.document.name}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* 4. Vehicle Components Section (Management & Renaming) */}
+      {/* 4. Vehicle Components Section (Interactive 3D Parts & Categories) */}
       <div className="workspace-section">
         <div className="section-header-row">
           <div>
@@ -448,7 +518,7 @@ export function VehicleWorkspace({
         </div>
       </div>
 
-      {/* 5. Vehicle-Level Documents (Insurance, PUC) */}
+      {/* 5. Vehicle Documents Section (Insurance & PUC) */}
       <div className="workspace-section">
         <div className="section-header-row">
           <div>
@@ -457,217 +527,214 @@ export function VehicleWorkspace({
               Statutory ownership & compliance certificates
             </span>
           </div>
-          <span className="badge badge-statutory">Statutory Compliance</span>
         </div>
 
-        <div className="workspace-docs-grid">
+        <div className="vehicle-docs-duo-grid">
           {/* Insurance Card */}
-          {(() => {
-            const insuranceDoc = (vehicle.documents || []).find(
-              (d) => (d.type || '').toLowerCase() === 'insurance'
-            );
-            if (insuranceDoc) {
-              const expiryStatus = calculateExpiryStatus(insuranceDoc.expiryDate);
-              return (
-                <div key={insuranceDoc.id} className="workspace-doc-card">
-                  <div className="doc-card-header">
-                    <div className="doc-icon-wrap">
-                      <ShieldCheck size={18} color={expiryStatus.isExpired ? '#ef4444' : '#10b981'} />
-                    </div>
-                    <div className="doc-titles">
-                      <span className="doc-primary-title">{insuranceDoc.title || 'Motor Vehicle Insurance'}</span>
-                      <span className="doc-issuer-name">{insuranceDoc.issuer || 'Insurance Provider'}</span>
-                    </div>
-                    <span className={`badge-doc-status ${expiryStatus.badgeClass}`}>
-                      <CheckCircle2 size={11} />
-                      <span>{expiryStatus.status}</span>
+          {insuranceDoc ? (
+            <div className="statutory-doc-card">
+              <div className="statutory-card-header">
+                <div className="statutory-header-left">
+                  <div className="statutory-icon-wrap">
+                    <ShieldCheck size={18} color={insuranceStatus?.isExpired ? '#ef4444' : '#10b981'} />
+                  </div>
+                  <div>
+                    <h3 className="statutory-title">INSURANCE</h3>
+                    <span className="statutory-subtitle">{insuranceDoc.issuer || 'Motor Insurance Provider'}</span>
+                  </div>
+                </div>
+                <span className={`statutory-badge ${insuranceStatus?.badgeClass}`}>
+                  {insuranceStatus?.status}
+                </span>
+              </div>
+
+              <div className="statutory-card-body">
+                <div className="statutory-period-block">
+                  <span className="statutory-period-label">Policy Period</span>
+                  <div className="statutory-period-dates">
+                    <span>{insuranceDoc.startDate ? formatDate(insuranceDoc.startDate) : '—'}</span>
+                    <span className="period-arrow">→</span>
+                    <span>{insuranceDoc.expiryDate ? formatDate(insuranceDoc.expiryDate) : '—'}</span>
+                  </div>
+                </div>
+
+                {insuranceStatus?.daysUntilExpiry !== null && (
+                  <div className="statutory-remaining-highlight">
+                    <Clock size={13} />
+                    <span>
+                      {insuranceStatus.daysUntilExpiry > 0
+                        ? `${insuranceStatus.daysUntilExpiry} days remaining`
+                        : insuranceStatus.daysUntilExpiry === 0
+                        ? 'Expires today'
+                        : `Expired ${Math.abs(insuranceStatus.daysUntilExpiry)} days ago`}
                     </span>
                   </div>
+                )}
 
-                  <div className="doc-card-body">
-                    <div className="doc-row">
-                      <span className="doc-label">Policy Number:</span>
-                      <span className="doc-val">{insuranceDoc.policyNumber || 'Not specified'}</span>
-                    </div>
-                    <div className="doc-row">
-                      <span className="doc-label">Valid from:</span>
-                      <span className="doc-val">
-                        {insuranceDoc.startDate ? formatDate(insuranceDoc.startDate) : 'Not specified'}
-                      </span>
-                    </div>
-                    <div className="doc-row">
-                      <span className="doc-label">Valid until:</span>
-                      <span className="doc-val">
-                        {insuranceDoc.expiryDate ? formatDate(insuranceDoc.expiryDate) : 'Not specified'}
-                      </span>
-                    </div>
-                    <div className="doc-row">
-                      <span className="doc-label">Status:</span>
-                      <span className={`doc-val ${expiryStatus.isExpired ? 'doc-val-expired' : 'doc-val-highlight'}`}>
-                        {expiryStatus.label}
-                      </span>
-                    </div>
+                {insuranceDoc.policyNumber && (
+                  <div className="statutory-number-row">
+                    <span className="number-label">Policy No:</span>
+                    <span className="number-val">{insuranceDoc.policyNumber}</span>
                   </div>
+                )}
+              </div>
 
-                  <div className="doc-card-actions">
-                    {insuranceDoc.document?.url && (
-                      <a
-                        href={insuranceDoc.document.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="btn-doc-link"
-                        title="View original insurance document"
-                      >
-                        <ExternalLink size={12} />
-                        <span>View Document</span>
-                      </a>
-                    )}
-                    <button
-                      type="button"
-                      className="btn-doc-action"
-                      onClick={() => onOpenVehicleDocUpload && onOpenVehicleDocUpload('insurance')}
-                      title="Replace insurance document"
-                    >
-                      <RotateCcw size={12} />
-                      <span>Replace</span>
-                    </button>
-                  </div>
-                </div>
-              );
-            }
-
-            // Empty state for Insurance
-            return (
-              <div key="empty-insurance" className="workspace-doc-card doc-card-empty">
-                <div className="doc-card-header">
-                  <div className="doc-icon-wrap icon-wrap-muted">
+              <div className="statutory-card-footer">
+                {insuranceDoc.document?.url && (
+                  <a
+                    href={insuranceDoc.document.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn-statutory-view"
+                  >
+                    <ExternalLink size={12} />
+                    <span>View Document</span>
+                  </a>
+                )}
+                <button
+                  type="button"
+                  className="btn-statutory-replace"
+                  onClick={() => onOpenVehicleDocUpload && onOpenVehicleDocUpload('insurance')}
+                >
+                  <RotateCcw size={12} />
+                  <span>Replace</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="statutory-doc-card statutory-card-empty">
+              <div className="statutory-card-header">
+                <div className="statutory-header-left">
+                  <div className="statutory-icon-wrap icon-wrap-muted">
                     <Shield size={18} color="#64748b" />
                   </div>
-                  <div className="doc-titles">
-                    <span className="doc-primary-title">Motor Insurance</span>
-                    <span className="doc-issuer-name">Statutory vehicle coverage</span>
+                  <div>
+                    <h3 className="statutory-title">INSURANCE</h3>
+                    <span className="statutory-subtitle">Statutory vehicle coverage</span>
                   </div>
                 </div>
-                <div className="doc-card-body">
-                  <p className="doc-empty-text">No insurance document uploaded.</p>
-                </div>
-                <div className="doc-card-actions">
-                  <button
-                    type="button"
-                    className="btn-upload-statutory"
-                    onClick={() => onOpenVehicleDocUpload && onOpenVehicleDocUpload('insurance')}
-                  >
-                    <Upload size={13} />
-                    <span>Upload Insurance</span>
-                  </button>
-                </div>
               </div>
-            );
-          })()}
+              <div className="statutory-card-body">
+                <h4 className="empty-card-heading">No insurance document</h4>
+                <p className="empty-card-sub">
+                  Upload your policy document to keep its validity and status in one place.
+                </p>
+              </div>
+              <div className="statutory-card-footer">
+                <button
+                  type="button"
+                  className="btn-statutory-upload"
+                  onClick={() => onOpenVehicleDocUpload && onOpenVehicleDocUpload('insurance')}
+                >
+                  <Upload size={13} />
+                  <span>Upload Insurance</span>
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* PUC Card */}
-          {(() => {
-            const pucDoc = (vehicle.documents || []).find(
-              (d) => (d.type || '').toLowerCase() === 'puc'
-            );
-            if (pucDoc) {
-              const expiryStatus = calculateExpiryStatus(pucDoc.expiryDate);
-              return (
-                <div key={pucDoc.id} className="workspace-doc-card">
-                  <div className="doc-card-header">
-                    <div className="doc-icon-wrap">
-                      <ShieldCheck size={18} color={expiryStatus.isExpired ? '#ef4444' : '#10b981'} />
-                    </div>
-                    <div className="doc-titles">
-                      <span className="doc-primary-title">{pucDoc.title || 'Pollution Under Control (PUC)'}</span>
-                      <span className="doc-issuer-name">{pucDoc.issuer || 'Authorized Testing Centre'}</span>
-                    </div>
-                    <span className={`badge-doc-status ${expiryStatus.badgeClass}`}>
-                      <CheckCircle2 size={11} />
-                      <span>{expiryStatus.status}</span>
+          {pucDoc ? (
+            <div className="statutory-doc-card">
+              <div className="statutory-card-header">
+                <div className="statutory-header-left">
+                  <div className="statutory-icon-wrap">
+                    <ShieldCheck size={18} color={pucStatus?.isExpired ? '#ef4444' : '#10b981'} />
+                  </div>
+                  <div>
+                    <h3 className="statutory-title">PUC</h3>
+                    <span className="statutory-subtitle">{pucDoc.issuer || 'Pollution Under Control'}</span>
+                  </div>
+                </div>
+                <span className={`statutory-badge ${pucStatus?.badgeClass}`}>
+                  {pucStatus?.status}
+                </span>
+              </div>
+
+              <div className="statutory-card-body">
+                <div className="statutory-period-block">
+                  <span className="statutory-period-label">Validity Period</span>
+                  <div className="statutory-period-dates">
+                    <span>{pucDoc.startDate ? formatDate(pucDoc.startDate) : '—'}</span>
+                    <span className="period-arrow">→</span>
+                    <span>{pucDoc.expiryDate ? formatDate(pucDoc.expiryDate) : '—'}</span>
+                  </div>
+                </div>
+
+                {pucStatus?.daysUntilExpiry !== null && (
+                  <div className="statutory-remaining-highlight">
+                    <Clock size={13} />
+                    <span>
+                      {pucStatus.daysUntilExpiry > 0
+                        ? `${pucStatus.daysUntilExpiry} days remaining`
+                        : pucStatus.daysUntilExpiry === 0
+                        ? 'Expires today'
+                        : `Expired ${Math.abs(pucStatus.daysUntilExpiry)} days ago`}
                     </span>
                   </div>
+                )}
 
-                  <div className="doc-card-body">
-                    <div className="doc-row">
-                      <span className="doc-label">Certificate Number:</span>
-                      <span className="doc-val">{pucDoc.certificateNumber || 'Not specified'}</span>
-                    </div>
-                    <div className="doc-row">
-                      <span className="doc-label">Valid from:</span>
-                      <span className="doc-val">
-                        {pucDoc.startDate ? formatDate(pucDoc.startDate) : 'Not specified'}
-                      </span>
-                    </div>
-                    <div className="doc-row">
-                      <span className="doc-label">Valid until:</span>
-                      <span className="doc-val">
-                        {pucDoc.expiryDate ? formatDate(pucDoc.expiryDate) : 'Not specified'}
-                      </span>
-                    </div>
-                    <div className="doc-row">
-                      <span className="doc-label">Status:</span>
-                      <span className={`doc-val ${expiryStatus.isExpired ? 'doc-val-expired' : 'doc-val-highlight'}`}>
-                        {expiryStatus.label}
-                      </span>
-                    </div>
+                {pucDoc.certificateNumber && (
+                  <div className="statutory-number-row">
+                    <span className="number-label">Certificate No:</span>
+                    <span className="number-val">{pucDoc.certificateNumber}</span>
                   </div>
+                )}
+              </div>
 
-                  <div className="doc-card-actions">
-                    {pucDoc.document?.url && (
-                      <a
-                        href={pucDoc.document.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="btn-doc-link"
-                        title="View original PUC document"
-                      >
-                        <ExternalLink size={12} />
-                        <span>View Document</span>
-                      </a>
-                    )}
-                    <button
-                      type="button"
-                      className="btn-doc-action"
-                      onClick={() => onOpenVehicleDocUpload && onOpenVehicleDocUpload('puc')}
-                      title="Replace PUC document"
-                    >
-                      <RotateCcw size={12} />
-                      <span>Replace</span>
-                    </button>
-                  </div>
-                </div>
-              );
-            }
-
-            // Empty state for PUC
-            return (
-              <div key="empty-puc" className="workspace-doc-card doc-card-empty">
-                <div className="doc-card-header">
-                  <div className="doc-icon-wrap icon-wrap-muted">
+              <div className="statutory-card-footer">
+                {pucDoc.document?.url && (
+                  <a
+                    href={pucDoc.document.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn-statutory-view"
+                  >
+                    <ExternalLink size={12} />
+                    <span>View Document</span>
+                  </a>
+                )}
+                <button
+                  type="button"
+                  className="btn-statutory-replace"
+                  onClick={() => onOpenVehicleDocUpload && onOpenVehicleDocUpload('puc')}
+                >
+                  <RotateCcw size={12} />
+                  <span>Replace</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="statutory-doc-card statutory-card-empty">
+              <div className="statutory-card-header">
+                <div className="statutory-header-left">
+                  <div className="statutory-icon-wrap icon-wrap-muted">
                     <Shield size={18} color="#64748b" />
                   </div>
-                  <div className="doc-titles">
-                    <span className="doc-primary-title">Pollution Under Control (PUC)</span>
-                    <span className="doc-issuer-name">Mandatory emission certificate</span>
+                  <div>
+                    <h3 className="statutory-title">PUC</h3>
+                    <span className="statutory-subtitle">Mandatory emission certificate</span>
                   </div>
                 </div>
-                <div className="doc-card-body">
-                  <p className="doc-empty-text">No PUC document uploaded.</p>
-                </div>
-                <div className="doc-card-actions">
-                  <button
-                    type="button"
-                    className="btn-upload-statutory"
-                    onClick={() => onOpenVehicleDocUpload && onOpenVehicleDocUpload('puc')}
-                  >
-                    <Upload size={13} />
-                    <span>Upload PUC</span>
-                  </button>
-                </div>
               </div>
-            );
-          })()}
+              <div className="statutory-card-body">
+                <h4 className="empty-card-heading">No PUC document</h4>
+                <p className="empty-card-sub">
+                  Upload your PUC certificate to keep its validity and status in one place.
+                </p>
+              </div>
+              <div className="statutory-card-footer">
+                <button
+                  type="button"
+                  className="btn-statutory-upload"
+                  onClick={() => onOpenVehicleDocUpload && onOpenVehicleDocUpload('puc')}
+                >
+                  <Upload size={13} />
+                  <span>Upload PUC</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="compliance-note">

@@ -82,15 +82,14 @@ export function InspectionPanel({
       {/* Top Header with Back Navigation */}
       <div className="inspection-header">
         <button className="back-to-vehicle-btn" onClick={onExit} title="Exit Inspection Mode">
-          <ArrowLeft size={16} />
+          <ArrowLeft size={15} />
           <span>Back to Vehicle</span>
         </button>
-        <span className="inspection-badge">INSPECTION MODE</span>
+        <span className="inspection-badge">COMPONENT INSPECTION</span>
       </div>
 
       {/* Component Title & Subtitle */}
       <div className="inspection-title-section">
-        <div className="component-type-tag">COMPONENT</div>
         <div className="component-title-row">
           <h1 className="inspection-title">{displayName.toUpperCase()}</h1>
           <div className="component-menu-wrapper">
@@ -136,7 +135,17 @@ export function InspectionPanel({
             )}
           </div>
         </div>
-        <p className="inspection-subtitle">{config.subtitle || 'Vehicle Component'}</p>
+        <p className="inspection-subtitle">
+          {records.length} documented {records.length === 1 ? 'event' : 'events'}
+        </p>
+      </div>
+
+      {/* Primary Add Record Action */}
+      <div className="inspection-quick-action">
+        <button className="add-record-btn" onClick={handleAddRecordClick}>
+          <Plus size={15} />
+          <span>Add Service Record</span>
+        </button>
       </div>
 
       {/* Service History Section */}
@@ -144,14 +153,9 @@ export function InspectionPanel({
         <div className="service-history-header">
           <div className="service-history-title-row">
             <h2 className="service-history-title">
-              <Clock size={16} color="#38bdf8" />
-              <span>Service History</span>
+              <Clock size={15} color="#38bdf8" />
+              <span>Documented History</span>
             </h2>
-            <div className="service-header-badges">
-              <span className={`records-count-badge ${records.length > 0 ? 'badge-active' : 'badge-empty'}`}>
-                {records.length} {records.length === 1 ? 'Record' : 'Records'}
-              </span>
-            </div>
           </div>
         </div>
 
@@ -273,21 +277,14 @@ export function InspectionPanel({
         )}
       </div>
 
-      {/* Primary Action Button */}
-      <div className="inspection-action-section">
-        <button className="add-record-btn" onClick={handleAddRecordClick}>
-          <Plus size={16} />
-          <span>+ Add Service Record</span>
-        </button>
+      {/* Temporary Toast for User Feedback */}
+      {toastMessage && (
+        <div className="toast-notification">
+          <Info size={14} color="#38bdf8" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
 
-        {/* Temporary Toast for User Feedback */}
-        {toastMessage && (
-          <div className="toast-notification">
-            <Info size={14} color="#38bdf8" />
-            <span>{toastMessage}</span>
-          </div>
-        )}
-      </div>
 
       {/* Component Technical Specs / Hierarchy Reference */}
       {config.info?.metadata && config.info.metadata.length > 0 && (

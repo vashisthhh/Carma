@@ -43,6 +43,7 @@ export function DocumentImportModal({
   context = 'service-record', // 'service-record' | 'vehicle-document'
   documentCategory = null, // 'insurance' | 'puc'
   defaultComponentId = null,
+  vehicleId = null,
   onRecordSaved,
   onVehicleDocumentSaved
 }) {
@@ -245,10 +246,13 @@ export function DocumentImportModal({
         : null
     };
 
-    const savedDoc = updateVehicleDocument('veh-001', documentCategory || (isPuc ? 'puc' : 'insurance'), docData);
+    const targetCategory = documentCategory || (isPuc ? 'puc' : 'insurance');
+    const result = updateVehicleDocument(vehicleId || 'veh-001', targetCategory, docData);
+    const savedDoc = result?.savedDoc || result;
+    const updatedVehicle = result?.updatedVehicle || null;
 
     if (onVehicleDocumentSaved) {
-      onVehicleDocumentSaved(savedDoc, documentCategory || (isPuc ? 'puc' : 'insurance'));
+      onVehicleDocumentSaved(savedDoc, targetCategory, updatedVehicle);
     }
 
     onClose();
