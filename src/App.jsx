@@ -3,9 +3,19 @@ import { CarViewer } from './components/CarViewer';
 import { DebugPanel } from './components/DebugPanel';
 import { InspectionPanel } from './components/InspectionPanel';
 import { VehicleWorkspace } from './components/VehicleWorkspace';
-import { AiImportModal } from './components/AiImportModal';
+import { DocumentImportModal } from './components/DocumentImportModal';
+import { AddServiceRecordModal } from './components/AddServiceRecordModal';
+import { DeleteConfirmationModal } from './components/DeleteConfirmationModal';
+import { RenameComponentModal } from './components/RenameComponentModal';
 import { VEHICLES, getDefaultVehicle, getVehicleById } from './data/vehicleData';
 import { getInspectionConfig, calculateCameraFraming } from './config/inspectionConfig';
+import {
+  updateServiceRecord,
+  deleteServiceRecord,
+  renameComponent,
+  clearComponentHistory,
+  getComponentDisplayName
+} from './data/serviceHistoryData';
 import { Car, MousePointer, RotateCw, ZoomIn, ArrowLeft, CheckCircle2 } from 'lucide-react';
 
 export default function App() {
@@ -18,9 +28,19 @@ export default function App() {
   // Dynamic Records Version Tracker (triggers re-render when records change)
   const [recordsVersion, setRecordsVersion] = useState(0);
 
-  // AI Import Modal State
-  const [isAiImportOpen, setIsAiImportOpen] = useState(false);
+  // Unified Document Ingestion Modal State (service-record vs vehicle-document)
+  const [importModalConfig, setImportModalConfig] = useState({
+    isOpen: false,
+    context: 'service-record',
+    componentId: null,
+    documentCategory: null
+  });
   const [toastMessage, setToastMessage] = useState(null);
+
+  // Data Management Modal States (Edit, Delete, Rename)
+  const [editingRecord, setEditingRecord] = useState(null);
+  const [deletingRecord, setDeletingRecord] = useState(null);
+  const [renamingComponent, setRenamingComponent] = useState(null);
 
   const [modelData, setModelData] = useState({
     rootTree: null,
@@ -118,7 +138,35 @@ export default function App() {
     [activeInspectionConfig, handleEnterInspection]
   );
 
-  // When a record is imported via AI
+  // Unified Modal Opening Handlers
+  const handleOpenServiceDocImport = useCallback(() => {
+    setImportModalConfig({
+      isOpen: true,
+      context: 'service-record',
+      componentId: activeInspectionConfig?.targetMeshName || null,
+      documentCategory: null
+    });
+  }, [activeInspectionConfig]);
+
+  const handleOpenAddRecordFromInspection = useCallback((compTargetId) => {
+    setImportModalConfig({
+      isOpen: true,
+      context: 'service-record',
+      componentId: compTargetId,
+      documentCategory: null
+    });
+  }, []);
+
+  const handleOpenVehicleDocUpload = useCallback((category) => {
+    setImportModalConfig({
+      isOpen: true,
+      context: 'vehicle-document',
+      componentId: null,
+      documentCategory: category
+    });
+  }, []);
+
+  // When a record is imported / saved via DocumentImportModal
   const handleRecordSaved = useCallback((newRecord, componentId) => {
     setRecordsVersion((v) => v + 1);
     setToastMessage(`Service record successfully saved.`);
@@ -129,6 +177,68 @@ export default function App() {
       handleInspectComponentFromWorkspace(componentId);
     }
   }, [handleInspectComponentFromWorkspace]);
+
+  // When a vehicle statutory document is saved
+  const handleVehicleDocumentSaved = useCallback((savedDoc, category) => {
+    setRecordsVersion((v) => v + 1);
+    const docName = category === 'puc' ? 'PUC' : 'Insurance';
+    setToastMessage(`${docName} document verified and saved.`);
+    setTimeout(() => setToastMessage(null), 3500);
+  }, []);
+
+  // Data Management Handlers (Edit, Delete, Rename, Clear History)
+  const handleEditRecord = useCallback((record) => {
+    setEditingRecord(record);
+  }, []);
+
+  const handleDeleteRecord = useCallback((record) => {
+    setDeletingRecord(record);
+  }, []);
+
+  const handleConfirmDelete = useCallback((recordId) => {
+    const res = deleteServiceRecord(recordId);
+    if (res.success) {
+      setRecordsVersion((v) => v + 1);
+      setDeletingRecord(null);
+      setToastMessage('Service record deleted.');
+      setTimeout(() => setToastMessage(null), 3000);
+    }
+  }, []);
+
+  const handleSaveEditedRecord = useCallback((recordData, targetCompId) => {
+    if (editingRecord) {
+      const res = updateServiceRecord(editingRecord.id, recordData, targetCompId);
+      if (res) {
+        setRecordsVersion((v) => v + 1);
+        setEditingRecord(null);
+        setToastMessage('Service record updated successfully.');
+        setTimeout(() => setToastMessage(null), 3000);
+
+        if (targetCompId && targetCompId !== editingRecord.componentId) {
+          handleInspectComponentFromWorkspace(targetCompId);
+        }
+      }
+    }
+  }, [editingRecord, handleInspectComponentFromWorkspace]);
+
+  const handleRenameComponent = useCallback((componentId, currentName) => {
+    setRenamingComponent({ id: componentId, name: currentName });
+  }, []);
+
+  const handleSaveRenamedComponent = useCallback((componentId, newName) => {
+    renameComponent(componentId, newName);
+    setRecordsVersion((v) => v + 1);
+    setRenamingComponent(null);
+    setToastMessage(`Component renamed to "${newName}".`);
+    setTimeout(() => setToastMessage(null), 3000);
+  }, []);
+
+  const handleClearHistory = useCallback((componentId) => {
+    const res = clearComponentHistory(componentId);
+    setRecordsVersion((v) => v + 1);
+    setToastMessage(`Cleared ${res.clearedCount} records from component history.`);
+    setTimeout(() => setToastMessage(null), 3000);
+  }, []);
 
   return (
     <div className="app-workspace-page" ref={containerRef}>
@@ -202,6 +312,11 @@ export default function App() {
             config={activeInspectionConfig}
             onExit={handleExitInspection}
             onOpenHierarchy={() => setShowHierarchyInInspection(true)}
+            onEditRecord={handleEditRecord}
+            onDeleteRecord={handleDeleteRecord}
+            onRenameComponent={handleRenameComponent}
+            onClearHistory={handleClearHistory}
+            onOpenAddRecord={handleOpenAddRecordFromInspection}
           />
         )}
 
@@ -240,17 +355,58 @@ export default function App() {
       <VehicleWorkspace
         vehicle={currentVehicle}
         onInspectComponent={handleInspectComponentFromWorkspace}
-        onOpenAiImport={() => setIsAiImportOpen(true)}
+        onOpenAiImport={handleOpenServiceDocImport}
+        onOpenVehicleDocUpload={handleOpenVehicleDocUpload}
         recordsVersion={recordsVersion}
+        onEditRecord={handleEditRecord}
+        onDeleteRecord={handleDeleteRecord}
+        onRenameComponent={handleRenameComponent}
+        onClearHistory={handleClearHistory}
       />
 
-      {/* AI Document Import Modal */}
-      <AiImportModal
-        isOpen={isAiImportOpen}
-        onClose={() => setIsAiImportOpen(false)}
+      {/* Unified Document Ingestion Modal (Service Records & Statutory Vehicle Documents) */}
+      <DocumentImportModal
+        isOpen={importModalConfig.isOpen}
+        context={importModalConfig.context}
+        documentCategory={importModalConfig.documentCategory}
+        defaultComponentId={importModalConfig.componentId}
+        onClose={() => setImportModalConfig((prev) => ({ ...prev, isOpen: false }))}
         onRecordSaved={handleRecordSaved}
-        defaultComponentId={activeInspectionConfig?.targetMeshName || null}
+        onVehicleDocumentSaved={handleVehicleDocumentSaved}
       />
+
+      {/* Edit Service Record Modal */}
+      {editingRecord && (
+        <AddServiceRecordModal
+          isOpen={Boolean(editingRecord)}
+          initialRecord={editingRecord}
+          componentId={editingRecord.componentId}
+          componentName={getComponentDisplayName(editingRecord.componentId)}
+          onClose={() => setEditingRecord(null)}
+          onSave={handleSaveEditedRecord}
+        />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deletingRecord && (
+        <DeleteConfirmationModal
+          isOpen={Boolean(deletingRecord)}
+          record={deletingRecord}
+          onClose={() => setDeletingRecord(null)}
+          onConfirm={handleConfirmDelete}
+        />
+      )}
+
+      {/* Rename Component Modal */}
+      {renamingComponent && (
+        <RenameComponentModal
+          isOpen={Boolean(renamingComponent)}
+          componentId={renamingComponent.id}
+          currentDisplayName={renamingComponent.name}
+          onClose={() => setRenamingComponent(null)}
+          onSave={handleSaveRenamedComponent}
+        />
+      )}
 
       {/* Global Toast Notification */}
       {toastMessage && (

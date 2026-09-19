@@ -14,9 +14,11 @@ import {
   CheckCircle2,
   Paperclip,
   ExternalLink,
-  File
+  Edit3,
+  Trash2,
+  MoreVertical
 } from 'lucide-react';
-import { getComponentServiceHistory, addServiceRecord } from '../data/serviceHistoryData';
+import { getComponentServiceHistory, addServiceRecord, getComponentDisplayName } from '../data/serviceHistoryData';
 import { AddServiceRecordModal } from './AddServiceRecordModal';
 
 /**
@@ -38,28 +40,37 @@ function formatDate(dateStr) {
 export function InspectionPanel({
   config,
   onExit,
-  onOpenHierarchy
+  onOpenHierarchy,
+  onEditRecord,
+  onDeleteRecord,
+  onRenameComponent,
+  onClearHistory,
+  onOpenAddRecord
 }) {
   const [toastMessage, setToastMessage] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [recordsVersion, setRecordsVersion] = useState(0);
+  const [showComponentMenu, setShowComponentMenu] = useState(false);
 
   if (!config) return null;
 
   // Retrieve service history for the inspected component using targetMeshName or id
-  const serviceData = getComponentServiceHistory(
-    config.targetMeshName || config.id || config.title
-  );
+  const targetId = config.targetMeshName || config.id || config.title;
+  const serviceData = getComponentServiceHistory(targetId);
 
   const records = serviceData.records || [];
-  const displayName = serviceData.displayName || config.title;
+  const displayName = getComponentDisplayName(serviceData.componentId) || serviceData.displayName || config.title;
 
   const handleAddRecordClick = () => {
-    setIsModalOpen(true);
+    if (onOpenAddRecord) {
+      onOpenAddRecord(serviceData.componentId);
+    } else {
+      setIsModalOpen(true);
+    }
   };
 
-  const handleSaveRecord = (recordData) => {
-    addServiceRecord(serviceData.componentId, recordData);
+  const handleSaveRecord = (recordData, targetCompId) => {
+    addServiceRecord(targetCompId || serviceData.componentId, recordData);
     setRecordsVersion((v) => v + 1);
     setIsModalOpen(false);
     setToastMessage('Service record added successfully.');
@@ -80,7 +91,51 @@ export function InspectionPanel({
       {/* Component Title & Subtitle */}
       <div className="inspection-title-section">
         <div className="component-type-tag">COMPONENT</div>
-        <h1 className="inspection-title">{displayName.toUpperCase()}</h1>
+        <div className="component-title-row">
+          <h1 className="inspection-title">{displayName.toUpperCase()}</h1>
+          <div className="component-menu-wrapper">
+            <button
+              type="button"
+              className="btn-dots-menu"
+              onClick={() => setShowComponentMenu(!showComponentMenu)}
+              title="Component options"
+            >
+              <MoreVertical size={16} />
+            </button>
+            {showComponentMenu && (
+              <div className="dropdown-menu">
+                <button
+                  type="button"
+                  className="dropdown-item"
+                  onClick={() => {
+                    setShowComponentMenu(false);
+                    if (onRenameComponent) {
+                      onRenameComponent(serviceData.componentId, displayName);
+                    }
+                  }}
+                >
+                  <Edit3 size={13} />
+                  <span>Rename Component</span>
+                </button>
+                {records.length > 0 && (
+                  <button
+                    type="button"
+                    className="dropdown-item dropdown-item-danger"
+                    onClick={() => {
+                      setShowComponentMenu(false);
+                      if (onClearHistory) {
+                        onClearHistory(serviceData.componentId);
+                      }
+                    }}
+                  >
+                    <Trash2 size={13} />
+                    <span>Clear History</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
         <p className="inspection-subtitle">{config.subtitle || 'Vehicle Component'}</p>
       </div>
 
@@ -96,7 +151,6 @@ export function InspectionPanel({
               <span className={`records-count-badge ${records.length > 0 ? 'badge-active' : 'badge-empty'}`}>
                 {records.length} {records.length === 1 ? 'Record' : 'Records'}
               </span>
-              <span className="demo-data-badge">DEMO DATA</span>
             </div>
           </div>
         </div>
@@ -108,14 +162,36 @@ export function InspectionPanel({
               const typeLower = (record.type || 'service').toLowerCase();
               return (
                 <div key={record.id} className="service-record-card">
-                  {/* Card Header: Type Badge & Date */}
+                  {/* Card Header: Type Badge & Date & Actions */}
                   <div className="record-header">
-                    <span className={`service-type-badge badge-${typeLower}`}>
-                      {record.type}
-                    </span>
-                    <div className="record-date">
-                      <Calendar size={13} />
-                      <span>{formatDate(record.date)}</span>
+                    <div className="record-header-left">
+                      <span className={`service-type-badge badge-${typeLower}`}>
+                        {record.type}
+                      </span>
+                      <div className="record-date">
+                        <Calendar size={13} />
+                        <span>{formatDate(record.date)}</span>
+                      </div>
+                    </div>
+                    <div className="record-actions">
+                      <button
+                        type="button"
+                        className="btn-record-action"
+                        onClick={() => onEditRecord && onEditRecord(record)}
+                        title="Edit service record"
+                      >
+                        <Edit3 size={12} />
+                        <span>Edit</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-record-action btn-record-delete"
+                        onClick={() => onDeleteRecord && onDeleteRecord(record)}
+                        title="Delete service record"
+                      >
+                        <Trash2 size={12} />
+                        <span>Delete</span>
+                      </button>
                     </div>
                   </div>
 

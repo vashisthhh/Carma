@@ -12,12 +12,15 @@ import {
   File,
   Trash2,
   UploadCloud,
-  Sparkles,
   Loader2,
   ShieldAlert,
-  HelpCircle
+  HelpCircle,
+  Layers,
+  ExternalLink,
+  Sparkles
 } from 'lucide-react';
 import { extractDocumentWithAI } from '../services/aiExtractionService';
+import { SUPPORTED_COMPONENTS, getComponentDisplayName } from '../data/serviceHistoryData';
 
 const SERVICE_TYPES = [
   'Replacement',
@@ -46,16 +49,22 @@ export function AddServiceRecordModal({
   isOpen,
   componentName,
   componentId,
+  initialRecord = null,
   onClose,
   onSave
 }) {
   const today = new Date().toISOString().split('T')[0];
+  const isEditMode = Boolean(initialRecord);
 
+  const [targetComponentId, setTargetComponentId] = useState(
+    initialRecord?.componentId || componentId || 'tail-light'
+  );
   const [serviceType, setServiceType] = useState('Replacement');
   const [date, setDate] = useState(today);
   const [mileage, setMileage] = useState('');
   const [cost, setCost] = useState('');
   const [description, setDescription] = useState('');
+  const [existingDocument, setExistingDocument] = useState(null);
   const [attachedFile, setAttachedFile] = useState(null);
   const [error, setError] = useState(null);
 
@@ -65,15 +74,28 @@ export function AddServiceRecordModal({
 
   const fileInputRef = useRef(null);
 
-  // Reset form when modal opens
+  // Reset or populate form when modal opens
   useEffect(() => {
     if (isOpen) {
-      setServiceType('Replacement');
-      setDate(today);
-      setMileage('');
-      setCost('');
-      setDescription('');
-      setAttachedFile(null);
+      if (initialRecord) {
+        setServiceType(initialRecord.type || 'Replacement');
+        setDate(initialRecord.date || today);
+        setMileage(initialRecord.mileage != null ? String(initialRecord.mileage) : '');
+        setCost(initialRecord.cost != null ? String(initialRecord.cost) : '');
+        setDescription(initialRecord.description || '');
+        setTargetComponentId(initialRecord.componentId || componentId || 'tail-light');
+        setExistingDocument(initialRecord.document || null);
+        setAttachedFile(null);
+      } else {
+        setServiceType('Replacement');
+        setDate(today);
+        setMileage('');
+        setCost('');
+        setDescription('');
+        setTargetComponentId(componentId || 'tail-light');
+        setExistingDocument(null);
+        setAttachedFile(null);
+      }
       setError(null);
       setAiStatus('idle');
       setAiResult(null);
@@ -81,7 +103,7 @@ export function AddServiceRecordModal({
         fileInputRef.current.value = '';
       }
     }
-  }, [isOpen]);
+  }, [isOpen, initialRecord, componentId, today]);
 
   // Handle ESC key to close
   useEffect(() => {
@@ -186,7 +208,7 @@ export function AddServiceRecordModal({
 
     setError(null);
 
-    let documentData = null;
+    let documentData = existingDocument;
     if (attachedFile) {
       documentData = {
         name: attachedFile.name,
@@ -197,14 +219,18 @@ export function AddServiceRecordModal({
       };
     }
 
-    onSave({
-      type: serviceType,
-      date,
-      mileage: Number(mileage),
-      cost: Number(cost),
-      description: description.trim(),
-      document: documentData
-    });
+    onSave(
+      {
+        ...(initialRecord ? { id: initialRecord.id } : {}),
+        type: serviceType,
+        date,
+        mileage: Number(mileage),
+        cost: Number(cost),
+        description: description.trim(),
+        document: documentData
+      },
+      targetComponentId
+    );
   };
 
   return (
@@ -223,9 +249,17 @@ export function AddServiceRecordModal({
               <Wrench size={16} color="#38bdf8" />
             </div>
             <div>
-              <h3 id="modal-title" className="modal-title">Add Service Record</h3>
+              <h3 id="modal-title" className="modal-title">
+                {isEditMode ? 'Edit Service Record' : 'Add Service Record'}
+              </h3>
               <p className="modal-subtitle">
-                Component: <span className="modal-component-badge">{componentName}</span>
+                {isEditMode ? (
+                  'Update service details or re-assign to another component.'
+                ) : (
+                  <>
+                    Component: <span className="modal-component-badge">{getComponentDisplayName(targetComponentId)}</span>
+                  </>
+                )}
               </p>
             </div>
           </div>
@@ -247,6 +281,27 @@ export function AddServiceRecordModal({
               <span>{error}</span>
             </div>
           )}
+
+          {/* Target Component Selector */}
+          <div className="form-group">
+            <label className="form-label" htmlFor="service-target-component">
+              <Layers size={13} />
+              <span>Target Vehicle Component</span>
+            </label>
+            <select
+              id="service-target-component"
+              className="form-input"
+              value={targetComponentId}
+              onChange={(e) => setTargetComponentId(e.target.value)}
+              required
+            >
+              {SUPPORTED_COMPONENTS.map((comp) => (
+                <option key={comp.id} value={comp.id}>
+                  {getComponentDisplayName(comp.id)}
+                </option>
+              ))}
+            </select>
+          </div>
 
           {/* Service Type */}
           <div className="form-group">
@@ -579,6 +634,54 @@ export function AddServiceRecordModal({
                   );
                 })()}
               </div>
+            ) : existingDocument ? (
+              <div className="attached-file-container">
+                <div className="attached-file-preview">
+                  <div className="attached-file-info">
+                    <div className="attached-file-icon">
+                      <File size={16} color="#38bdf8" />
+                    </div>
+                    <div className="attached-file-text">
+                      <span className="attached-file-name" title={existingDocument.name}>
+                        {existingDocument.name}
+                      </span>
+                      <span className="attached-file-meta">
+                        {existingDocument.size ? `${(existingDocument.size / 1024).toFixed(0)} KB · ` : ''}Attached Document
+                      </span>
+                    </div>
+                  </div>
+                  <div className="attached-file-actions">
+                    {existingDocument.url && (
+                      <a
+                        href={existingDocument.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="view-document-btn"
+                        title="View attached document"
+                      >
+                        <ExternalLink size={12} />
+                        <span>View</span>
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      className="replace-file-btn"
+                      onClick={() => fileInputRef.current?.click()}
+                      title="Replace with another file"
+                    >
+                      Replace
+                    </button>
+                    <button
+                      type="button"
+                      className="remove-file-btn"
+                      onClick={() => setExistingDocument(null)}
+                      title="Remove attached file"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              </div>
             ) : (
               <div
                 className="file-upload-dropzone"
@@ -608,7 +711,7 @@ export function AddServiceRecordModal({
               type="submit"
               className="modal-btn-save"
             >
-              Save Record
+              {isEditMode ? 'Save Changes' : 'Save Record'}
             </button>
           </div>
         </form>

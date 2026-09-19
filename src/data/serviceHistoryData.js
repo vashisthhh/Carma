@@ -93,6 +93,12 @@ export const VEHICLE_SERVICE_DATA = {
       displayName: 'Boot Lock',
       aliases: ['Boot Lock', 'boot-lock', 'boot lock'],
       records: []
+    },
+    'general-maintenance': {
+      componentId: 'general-maintenance',
+      displayName: 'General Maintenance',
+      aliases: ['general maintenance', 'periodic maintenance', 'service', 'general service', 'maintenance'],
+      records: []
     }
   }
 };
@@ -108,7 +114,8 @@ export const SUPPORTED_COMPONENTS = [
   { id: 'rear-glass', name: 'Back Glass' },
   { id: 'steering', name: 'Steering' },
   { id: 'seat-front', name: 'Front Seat' },
-  { id: 'boot-lock', name: 'Boot Lock' }
+  { id: 'boot-lock', name: 'Boot Lock' },
+  { id: 'general-maintenance', name: 'General Maintenance' }
 ];
 
 /**
@@ -288,4 +295,209 @@ export function getVehicleServiceSummary(vehicleId) {
     records
   };
 }
+
+/**
+ * Update an existing service record in-place, with optional component reassignment.
+ * 
+ * @param {string} recordId - Unique ID of the service record to update
+ * @param {object} updatedData - Object containing fields to update: { type, date, mileage, cost, description, document }
+ * @param {string} [newComponentId] - Target component ID if moving to a different component
+ * @returns {{ success: boolean, record: object, oldComponentId: string, newComponentId: string } | null}
+ */
+export function updateServiceRecord(recordId, updatedData, newComponentId) {
+  if (!recordId) return null;
+
+  // 1. Locate existing record and current component
+  let currentComponent = null;
+  let recordIndex = -1;
+
+  for (const comp of Object.values(VEHICLE_SERVICE_DATA.components)) {
+    if (Array.isArray(comp.records)) {
+      const idx = comp.records.findIndex((r) => r.id === recordId);
+      if (idx !== -1) {
+        currentComponent = comp;
+        recordIndex = idx;
+        break;
+      }
+    }
+  }
+
+  if (!currentComponent || recordIndex === -1) {
+    console.warn(`[updateServiceRecord] Record with id ${recordId} not found.`);
+    return null;
+  }
+
+  const existingRecord = currentComponent.records[recordIndex];
+
+  // Determine target component
+  const targetCompId = (newComponentId || currentComponent.componentId).trim().toLowerCase().replace(/[\s_]+/g, '-');
+  const isMovingComponent = targetCompId !== currentComponent.componentId;
+
+  // Merge updated fields while keeping same record id
+  const updatedRecord = {
+    ...existingRecord,
+    type: updatedData.type !== undefined ? updatedData.type : existingRecord.type,
+    date: updatedData.date !== undefined ? updatedData.date : existingRecord.date,
+    mileage: updatedData.mileage !== undefined ? Number(updatedData.mileage) : existingRecord.mileage,
+    cost: updatedData.cost !== undefined ? Number(updatedData.cost) : existingRecord.cost,
+    description: updatedData.description !== undefined ? updatedData.description : existingRecord.description,
+    document: updatedData.document !== undefined ? updatedData.document : existingRecord.document
+  };
+
+  if (isMovingComponent) {
+    // Remove from current component
+    currentComponent.records.splice(recordIndex, 1);
+
+    // Find or register target component
+    let targetComponent = VEHICLE_SERVICE_DATA.components[targetCompId];
+    if (!targetComponent) {
+      targetComponent = {
+        componentId: targetCompId,
+        displayName: formatDisplayName(targetCompId),
+        aliases: [targetCompId],
+        records: []
+      };
+      VEHICLE_SERVICE_DATA.components[targetCompId] = targetComponent;
+    }
+
+    // Add to new component's records
+    targetComponent.records.unshift(updatedRecord);
+  } else {
+    // Update in-place in current component
+    currentComponent.records[recordIndex] = updatedRecord;
+  }
+
+  return {
+    success: true,
+    record: updatedRecord,
+    oldComponentId: currentComponent.componentId,
+    newComponentId: targetCompId
+  };
+}
+
+/**
+ * Delete a service record and cleanly remove its association.
+ * 
+ * @param {string} recordId - Unique ID of the service record to delete
+ * @returns {{ success: boolean, deletedRecord?: object, componentId?: string }}
+ */
+export function deleteServiceRecord(recordId) {
+  if (!recordId) return { success: false };
+
+  for (const comp of Object.values(VEHICLE_SERVICE_DATA.components)) {
+    if (Array.isArray(comp.records)) {
+      const idx = comp.records.findIndex((r) => r.id === recordId);
+      if (idx !== -1) {
+        const [deletedRecord] = comp.records.splice(idx, 1);
+        return {
+          success: true,
+          deletedRecord,
+          componentId: comp.componentId
+        };
+      }
+    }
+  }
+
+  return { success: false };
+}
+
+/**
+ * Rename a component's display name without altering the underlying componentId or 3D object mapping.
+ * 
+ * @param {string} componentId - Component ID (e.g. 'tail-light')
+ * @param {string} newDisplayName - New user-facing name (e.g. 'Rear Light')
+ * @returns {{ componentId: string, displayName: string } | null}
+ */
+export function renameComponent(componentId, newDisplayName) {
+  if (!componentId || !newDisplayName?.trim()) return null;
+
+  const normalized = componentId.trim().toLowerCase().replace(/[\s_]+/g, '-');
+  const newName = newDisplayName.trim();
+
+  // 1. Update in VEHICLE_SERVICE_DATA.components
+  let targetComponent = VEHICLE_SERVICE_DATA.components[normalized];
+  if (!targetComponent) {
+    for (const comp of Object.values(VEHICLE_SERVICE_DATA.components)) {
+      if (comp.componentId === normalized) {
+        targetComponent = comp;
+        break;
+      }
+    }
+  }
+
+  if (targetComponent) {
+    targetComponent.displayName = newName;
+  } else {
+    targetComponent = {
+      componentId: normalized,
+      displayName: newName,
+      aliases: [normalized],
+      records: []
+    };
+    VEHICLE_SERVICE_DATA.components[normalized] = targetComponent;
+  }
+
+  // 2. Update in SUPPORTED_COMPONENTS if present
+  const supported = SUPPORTED_COMPONENTS.find((c) => c.id === normalized);
+  if (supported) {
+    supported.name = newName;
+  }
+
+  return {
+    componentId: normalized,
+    displayName: newName
+  };
+}
+
+/**
+ * Safely clear all records from a component's history without deleting the 3D component.
+ * 
+ * @param {string} componentId - Component ID
+ * @returns {{ success: boolean, clearedCount: number, componentId: string }}
+ */
+export function clearComponentHistory(componentId) {
+  if (!componentId) return { success: false, clearedCount: 0, componentId: '' };
+
+  const normalized = componentId.trim().toLowerCase().replace(/[\s_]+/g, '-');
+  const comp = VEHICLE_SERVICE_DATA.components[normalized];
+
+  if (comp && Array.isArray(comp.records)) {
+    const count = comp.records.length;
+    comp.records = [];
+    return { success: true, clearedCount: count, componentId: normalized };
+  }
+
+  return { success: false, clearedCount: 0, componentId: normalized };
+}
+
+/**
+ * Get the single-source-of-truth display name for a component.
+ * 
+ * @param {string} componentId - Component ID
+ * @returns {string} Live display name
+ */
+export function getComponentDisplayName(componentId) {
+  if (!componentId) return 'Vehicle Component';
+  const normalized = String(componentId).trim().toLowerCase().replace(/[\s_]+/g, '-');
+  if (VEHICLE_SERVICE_DATA.components[normalized]) {
+    return VEHICLE_SERVICE_DATA.components[normalized].displayName;
+  }
+  const supported = SUPPORTED_COMPONENTS.find((c) => c.id === normalized);
+  if (supported) return supported.name;
+  return formatDisplayName(componentId);
+}
+
+/**
+ * Get all registered components with live display names and record counts.
+ * 
+ * @returns {Array<{ id: string, name: string, recordCount: number }>}
+ */
+export function getAllComponents() {
+  return Object.values(VEHICLE_SERVICE_DATA.components).map((comp) => ({
+    id: comp.componentId,
+    name: comp.displayName,
+    recordCount: Array.isArray(comp.records) ? comp.records.length : 0
+  }));
+}
+
 

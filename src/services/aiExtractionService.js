@@ -27,17 +27,151 @@ function fileToBase64(file) {
 }
 
 /**
+ * Normalizes date string to YYYY-MM-DD
+ */
+export function normalizeDateToISO(dateStr) {
+  if (!dateStr || typeof dateStr !== 'string') return null;
+  const monthNames = {
+    jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+    jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12'
+  };
+
+  // 1. ISO format: YYYY-MM-DD
+  const isoMatch = dateStr.match(/\b(202[0-9]|203[0-9])[-/](0?[1-9]|1[0-2])[-/](0?[1-9]|[12][0-9]|3[01])\b/);
+  if (isoMatch) {
+    return `${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}`;
+  }
+
+  // 2. Text month format: 06-Jan-2024, 06 Jan 2024, 6-January-2024
+  const textMatch = dateStr.match(/\b(0?[1-9]|[12][0-9]|3[01])[-/\s]+(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)[-/\s,]+(202[0-9]|203[0-9])\b/i);
+  if (textMatch) {
+    const day = textMatch[1].padStart(2, '0');
+    const month = monthNames[textMatch[2].substring(0, 3).toLowerCase()] || '01';
+    const year = textMatch[3];
+    return `${year}-${month}-${day}`;
+  }
+
+  // 3. Numeric DMY format: 06/01/2024 or 06-01-2024
+  const dmyMatch = dateStr.match(/\b(0?[1-9]|[12][0-9]|3[01])[-/.](0?[1-9]|1[0-2])[-/.](202[0-9]|203[0-9])\b/);
+  if (dmyMatch) {
+    const day = dmyMatch[1].padStart(2, '0');
+    const month = dmyMatch[2].padStart(2, '0');
+    const year = dmyMatch[3];
+    return `${year}-${month}-${day}`;
+  }
+
+  return null;
+}
+
+/**
  * Local fallback extraction engine used when backend/API key is unavailable.
  * Performs unified document understanding in one pass:
  * - Checks for vehicle/service evidence (make/model, parts, service actions, labour, automotive terms)
  * - Identifies non-vehicle documents (academic certificates, CV/resume, unrelated) without rigid substring bugs
  * - Strictly extracts visible fields without fabricating missing values (mileage, cost, etc. remain null if absent)
  */
-export function localFallbackExtract(file, componentName, componentId) {
+export function localFallbackExtract(file, componentName, componentId, options = {}) {
   const fileName = (file?.name || '').trim();
   const combined = `${fileName}`.trim();
   const normalized = combined.replace(/[_.\-\/]/g, ' ');
   const lines = combined.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+
+  const isVehicleDoc = options.context === 'vehicle-document' || options.documentCategory === 'insurance' || options.documentCategory === 'puc';
+
+  if (isVehicleDoc) {
+    const isPuc = options.documentCategory === 'puc' || /puc|pollution|emission/i.test(combined);
+    const docCategoryName = isPuc ? 'PUC' : 'Insurance';
+
+    // Reg check (excluding month names)
+    let registrationNumber = null;
+    const regMatches = [...combined.matchAll(/\b([A-Z]{2}[-\s]?[0-9]{1,2}[-\s]?[A-Z]{1,3}[-\s]?[0-9]{4})\b/gi)];
+    for (const m of regMatches) {
+      const candidate = m[1].toUpperCase().replace(/\s+/g, '-');
+      if (!candidate.includes('JAN') && !candidate.includes('FEB') && !candidate.includes('MAR') &&
+          !candidate.includes('APR') && !candidate.includes('MAY') && !candidate.includes('JUN') &&
+          !candidate.includes('JUL') && !candidate.includes('AUG') && !candidate.includes('SEP') &&
+          !candidate.includes('OCT') && !candidate.includes('NOV') && !candidate.includes('DEC')) {
+        registrationNumber = candidate;
+        break;
+      }
+    }
+
+    // Date extraction using semantic labels
+    let startDate = null;
+    let expiryDate = null;
+
+    // 1. Period Range matching (e.g. "Policy Period: 06-Jan-2024 to 05-Jan-2025" or "06-Jan-2024 to 05-Jan-2025")
+    const rangeMatch = combined.match(/(?:(?:Policy\s*Period|Period\s*of\s*(?:Insurance|Coverage)|Validity\s*Period|Coverage\s*Period)\s*[:]?\s*)?([0-9]{1,2}[-/.][A-Za-z0-9]+[-/.][0-9]{4})\s*(?:to|until|-|–)\s*([0-9]{1,2}[-/.][A-Za-z0-9]+[-/.][0-9]{4})/i);
+    if (rangeMatch) {
+      const s = normalizeDateToISO(rangeMatch[1]);
+      const e = normalizeDateToISO(rangeMatch[2]);
+      if (s) startDate = s;
+      if (e) expiryDate = e;
+    }
+
+    // 2. Start Date semantic matching
+    if (!startDate) {
+      const startMatch = combined.match(/(?:Valid\s*From|Effective\s*Date|Date\s*of\s*commencement|Date\s*&\s*Time|Date\s*of\s*(?:Issue|Testing)|Test\s*Date|Commencement\s*Date)\s*[:]?\s*([0-9]{1,2}[-/\s\w]+)/i);
+      if (startMatch) {
+        startDate = normalizeDateToISO(startMatch[1]);
+      }
+    }
+
+    // 3. Expiry Date semantic matching
+    if (!expiryDate) {
+      const expiryMatch = combined.match(/(?:Validity\s*Upto|Valid\s*(?:Upto|Until|To|Till)|Certificate\s*Validity|Expiry\s*Date|Date\s*of\s*expiry|Expires\s*on|Validity)\s*[:]?\s*([0-9]{1,2}[-/\s\w]+)/i);
+      if (expiryMatch) {
+        expiryDate = normalizeDateToISO(expiryMatch[1]);
+      }
+    }
+
+    // 4. Chronological fallback if semantic matching didn't yield both dates
+    if (!startDate || !expiryDate) {
+      const allFound = [];
+      const textDatePatterns = combined.matchAll(/\b(0?[1-9]|[12][0-9]|3[01])[-/\s]+(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)[-/\s,]+(202[0-9]|203[0-9])\b/gi);
+      for (const tm of textDatePatterns) {
+        const iso = normalizeDateToISO(tm[0]);
+        if (iso && !allFound.includes(iso)) allFound.push(iso);
+      }
+      const numDatePatterns = combined.matchAll(/\b(0?[1-9]|[12][0-9]|3[01])[-/.](0?[1-9]|1[0-2])[-/.](202[0-9]|203[0-9])\b/g);
+      for (const nm of numDatePatterns) {
+        const iso = normalizeDateToISO(nm[0]);
+        if (iso && !allFound.includes(iso)) allFound.push(iso);
+      }
+
+      if (!startDate && allFound.length > 0) {
+        startDate = allFound[0];
+      }
+      if (!expiryDate && allFound.length > 0) {
+        expiryDate = allFound[allFound.length - 1];
+      }
+    }
+
+    let policyNumber = null;
+    let certificateNumber = null;
+    if (isPuc) {
+      const pucNoMatch = combined.match(/\b([A-Z]{2}[0-9]{10,20})\b/) || combined.match(/(?:Certificate\s*(?:SL\s*)?No|certificate|cert|puc|pucc)[\s#.:-]*([A-Za-z0-9\/-]{6,30})/i);
+      if (pucNoMatch) certificateNumber = pucNoMatch[1].trim();
+    } else {
+      const polNoMatch = combined.match(/(?:Policy\s*(?:No|Number)[\s:]*)([A-Za-z0-9\/-]{6,30})/i);
+      if (polNoMatch) policyNumber = polNoMatch[1].trim();
+    }
+
+    return {
+      isVehicleDocument: true,
+      documentType: docCategoryName,
+      reason: `Document recognized as vehicle ${docCategoryName} certificate/policy.`,
+      fields: {
+        policyNumber,
+        certificateNumber,
+        issuer: isPuc ? 'Transport Dept. Authorized Centre' : 'Insurance Provider',
+        registrationNumber: registrationNumber || null,
+        startDate,
+        expiryDate
+      },
+      engine: 'fallback'
+    };
+  }
 
   // Evidence of vehicle / automotive context (make/model, parts, service actions, labour, automotive terms)
   const vehicleRegex = /\b(hyundai|eon|maruti|suzuki|honda|tata|toyota|mahindra|ford|volkswagen|skoda|renault|nissan|kia|car|vehicle|automobile|motor|auto|tail\s*light|tail\s*lamp|taillight|headlight|headlamp|fog\s*lamp|lamp|bulb|tyre|tire|wheel|rim|windshield|rear\s*glass|glass|brake|pad|disc|caliper|battery|engine|oil\s*filter|air\s*filter|coolant|bumper|fender|bonnet|hood|mirror|door|wiper|steering|suspension|strut|shock\s*absorber|clutch|exhaust|silencer|seat|spark\s*plug|fuse|belt|replacement|replaced|replace|repair|repaired|maintenance|servicing|periodic\s*service|inspection|checkup|diagnostic|alignment|balancing|labour|labor|fitting|installation|job\s*card|workshop|garage|service\s*center|service\s*plaza|auto\s*care|tyre\s*care|car\s*care|invoice|bill|receipt)\b/i;
@@ -266,9 +400,10 @@ export function localFallbackExtract(file, componentName, componentId) {
  * @param {File} file - Attached document file (PDF, JPG, PNG)
  * @param {string} componentName - Currently selected component name (e.g. 'Front Right Tyre')
  * @param {string} componentId - Currently selected component ID (e.g. 'tyre-front-right')
+ * @param {object} options - Options: { context: 'service-record' | 'vehicle-document', documentCategory: 'insurance' | 'puc' }
  * @returns {Promise<object>} Structured extraction result
  */
-export async function extractDocumentWithAI(file, componentName, componentId) {
+export async function extractDocumentWithAI(file, componentName = '', componentId = '', options = {}) {
   if (!file) {
     throw new Error('No document provided for extraction.');
   }
@@ -298,7 +433,9 @@ export async function extractDocumentWithAI(file, componentName, componentId) {
         fileSize: file.size,
         fileBase64,
         componentName,
-        componentId
+        componentId,
+        context: options.context || 'service-record',
+        documentCategory: options.documentCategory || null
       })
     });
 
@@ -311,5 +448,5 @@ export async function extractDocumentWithAI(file, componentName, componentId) {
   }
 
   // Fallback engine if backend is not available
-  return localFallbackExtract(file, componentName, componentId);
+  return localFallbackExtract(file, componentName, componentId, options);
 }
