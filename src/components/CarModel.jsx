@@ -36,10 +36,20 @@ export function CarModel({
     let meshCount = 0;
     let groupCount = 0;
 
-    // Cache initial positions for all meshes
+    // Cache initial positions for all meshes and update exterior body paint to matte off-white / light-grey
     gltf.scene.traverse((obj) => {
       if (obj.isMesh) {
         originalPositionsRef.current.set(obj.uuid, obj.position.clone());
+        if (obj.material) {
+          const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+          mats.forEach((m) => {
+            if (m && m.name === 'Blue Body') {
+              m.color.set('#e2e5e8');
+              m.roughness = 0.6;
+              m.metalness = 0.08;
+            }
+          });
+        }
       }
     });
 
