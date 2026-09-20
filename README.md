@@ -2,6 +2,16 @@
 
 CARMA is an automotive digital twin and vehicle intelligence platform that transforms fragmented paper invoices, service bills, and compliance certificates into an interactive, component-level 3D documented history. Instead of digging through glovebox folders or deciphering vague spreadsheets, vehicle owners and prospective buyers interact directly with the 3D car to inspect what was serviced, when, by whom, and at what cost.
 
+Try CARMA
+
+To test CARMA's document extraction workflow, use the sample PDFs provided in the "test pdfs" folder in this repository.
+
+Open the live demo, complete vehicle onboarding, and select Add Service Record. Upload one of the sample invoices from "test pdfs". CARMA will use Gemini to extract the relevant information, which you can review before adding it to the vehicle's documented service history.
+
+You can then select the relevant component on the 3D vehicle to view its history and supporting document.
+
+For the complete workflow, refer to the demo video included in the repository.
+
 ---
 
 1. Short Product Overview
