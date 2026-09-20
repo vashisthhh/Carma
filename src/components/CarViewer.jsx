@@ -168,7 +168,25 @@ export function CarViewer({
           shadows
           dpr={[1, 1.5]}
           camera={{ position: [4.5, 2.2, 4.5], fov: 42 }}
-          gl={{ antialias: true, alpha: true }}
+          gl={{
+            antialias: true,
+            alpha: true,
+            powerPreference: 'default',
+            failIfMajorPerformanceCaveat: false
+          }}
+          onCreated={({ gl }) => {
+            const canvas = gl?.domElement;
+            if (canvas) {
+              const handleContextLost = (event) => {
+                event.preventDefault();
+                console.warn('[CarViewer] WebGL context lost.');
+                if (onError) {
+                  onError(new Error('WebGL graphics context was lost. Click retry to reload.'));
+                }
+              };
+              canvas.addEventListener('webglcontextlost', handleContextLost, false);
+            }
+          }}
           style={{ background: 'transparent' }}
         >
           {/* Dynamic Camera Animation Controller */}

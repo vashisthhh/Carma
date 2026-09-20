@@ -93,6 +93,22 @@ function StudioCar() {
 }
 
 export function LoginCarHero() {
+  const glRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      // Immediately force context loss on unmount so CarViewer can acquire WebGL without waiting for GC
+      if (glRef.current) {
+        try {
+          glRef.current.forceContextLoss?.();
+          glRef.current.dispose?.();
+        } catch (e) {
+          // Ignore disposal errors
+        }
+      }
+    };
+  }, []);
+
   return (
     <div className="login-car-stage" aria-hidden="true">
       {/* Automotive Studio Stage Elements */}
@@ -102,7 +118,15 @@ export function LoginCarHero() {
         <Canvas
           shadows
           camera={{ position: [4.4, 1.9, 4.4], fov: 38 }}
-          gl={{ antialias: true, alpha: true }}
+          gl={{
+            antialias: true,
+            alpha: true,
+            powerPreference: 'default',
+            failIfMajorPerformanceCaveat: false
+          }}
+          onCreated={({ gl }) => {
+            glRef.current = gl;
+          }}
           style={{ background: 'transparent', width: '100%', height: '100%' }}
         >
           {/* Studio Photography Lighting */}
