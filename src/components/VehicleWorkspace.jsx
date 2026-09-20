@@ -27,6 +27,8 @@ import {
   getAllComponents
 } from '../data/serviceHistoryData';
 import { calculateExpiryStatus } from '../data/vehicleData';
+import { VehicleInsights } from './VehicleInsights';
+import { AskCarma } from './AskCarma';
 
 /**
  * Format ISO date string 'YYYY-MM-DD' to 'DD Mon YYYY'
@@ -743,6 +745,29 @@ export function VehicleWorkspace({
             Vehicle documents represent statutory ownership compliance. Component-level service records and parts invoices are attached directly to each individual service event above.
           </span>
         </div>
+      </div>
+
+      {/* 6. Vehicle Intelligence Section (Insights & Ask CARMA) */}
+      <div className="workspace-section vehicle-intelligence-section">
+        <div className="section-header-row">
+          <div>
+            <h2 className="workspace-section-title">Vehicle Intelligence</h2>
+            <span className="workspace-section-subtitle">
+              Documented service insights & grounded vehicle history intelligence
+            </span>
+          </div>
+        </div>
+
+        {/* Part 1: Vehicle Insights */}
+        <VehicleInsights records={records} componentsList={componentsList} />
+
+        {/* Part 2: Ask CARMA */}
+        <AskCarma
+          vehicle={vehicle}
+          records={records}
+          componentsList={componentsList}
+          onInspectComponent={onInspectComponent}
+        />
       </div>
     </section>
   );
