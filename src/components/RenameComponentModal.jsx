@@ -48,7 +48,7 @@ export function RenameComponentModal({
         <div className="modal-header">
           <div className="modal-title-group">
             <div className="modal-icon-badge">
-              <Edit3 size={18} color="#38bdf8" />
+              <Edit3 size={18} />
             </div>
             <div>
               <h3 className="modal-title">Rename Component</h3>

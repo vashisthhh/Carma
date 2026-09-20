@@ -176,7 +176,7 @@ export function InspectionPanel({
         <div className="service-history-header">
           <div className="service-history-title-row">
             <h2 className="service-history-title">
-              <Clock size={14} color="#38bdf8" />
+              <Clock size={14} />
               <span>Documented History</span>
             </h2>
           </div>
@@ -314,7 +314,7 @@ export function InspectionPanel({
       {/* Temporary Toast for User Feedback */}
       {toastMessage && (
         <div className="toast-notification">
-          <Info size={14} color="#38bdf8" />
+          <Info size={14} />
           <span>{toastMessage}</span>
         </div>
       )}
@@ -342,7 +342,7 @@ export function InspectionPanel({
       {config.associatedMeshNames && config.associatedMeshNames.length > 0 && (
         <div className="exploded-notice-card">
           <div className="notice-title">
-            <Layers size={14} color="#38bdf8" />
+            <Layers size={14} />
             <span>Exploded View Active</span>
           </div>
           <p className="notice-text">

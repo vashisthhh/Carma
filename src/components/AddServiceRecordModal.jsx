@@ -246,7 +246,7 @@ export function AddServiceRecordModal({
         <div className="modal-header">
           <div className="modal-title-group">
             <div className="modal-icon-wrap">
-              <Wrench size={16} color="#38bdf8" />
+              <Wrench size={16} />
             </div>
             <div>
               <h3 id="modal-title" className="modal-title">
@@ -416,7 +416,7 @@ export function AddServiceRecordModal({
                 <div className="attached-file-preview">
                   <div className="attached-file-info">
                     <div className="attached-file-icon">
-                      <File size={16} color="#38bdf8" />
+                      <File size={16} />
                     </div>
                     <div className="attached-file-text">
                       <span className="attached-file-name" title={attachedFile.name}>
@@ -469,7 +469,7 @@ export function AddServiceRecordModal({
                 {/* AI Extracting Loading Indicator */}
                 {aiStatus === 'extracting' && (
                   <div className="ai-extracting-card">
-                    <Loader2 size={16} className="spin-animation" color="#38bdf8" />
+                    <Loader2 size={16} className="spin-animation" />
                     <span>Analyzing document with AI...</span>
                   </div>
                 )}
@@ -639,7 +639,7 @@ export function AddServiceRecordModal({
                 <div className="attached-file-preview">
                   <div className="attached-file-info">
                     <div className="attached-file-icon">
-                      <File size={16} color="#38bdf8" />
+                      <File size={16} />
                     </div>
                     <div className="attached-file-text">
                       <span className="attached-file-name" title={existingDocument.name}>
@@ -687,7 +687,7 @@ export function AddServiceRecordModal({
                 className="file-upload-dropzone"
                 onClick={() => fileInputRef.current?.click()}
               >
-                <UploadCloud size={20} color="#38bdf8" />
+                <UploadCloud size={20} />
                 <div className="dropzone-text">
                   <span className="upload-prompt">
                     <strong>Attach Invoice / Document</strong>

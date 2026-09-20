@@ -136,7 +136,7 @@ export function Onboarding({
         <header className="login-topbar">
           <div className="login-brand-lockup">
             <div className="login-brand-icon">
-              <Car size={17} color="#38bdf8" />
+              <Car size={17} />
             </div>
             <div className="login-brand-text">
               <span className="login-brand-title">CARMA</span>
@@ -312,7 +312,7 @@ export function Onboarding({
 
         <div className="setup-header">
           <div className="setup-icon-wrap">
-            <Car size={22} color="#38bdf8" />
+            <Car size={22} />
           </div>
           <div>
             <h2 className="setup-title">

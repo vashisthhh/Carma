@@ -147,7 +147,7 @@ export function CarModel({
     // Formatted diagnostic console output
     console.group(
       '%c🚗 [Carma Scene Graph Hierarchy with Runtime Split Wheels]',
-      'color: #38bdf8; font-weight: bold; font-size: 14px;'
+      'color: #a33b4a; font-weight: bold; font-size: 14px;'
     );
     console.log(
       `%cLoaded model with ${flatNodes.length} Object3D nodes. Front wheels successfully split into independent left/right components.`,
@@ -198,6 +198,11 @@ export function CarModel({
     }
   };
 
+function getHighlightColor() {
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+  return isLight ? '#6B1F2A' : '#A33B4A';
+}
+
   // Highlight an object (subtle, restrained accent without harsh neon effects)
   const applyHighlight = (targetObject, duration = 3000, isHover = false) => {
     restoreOriginalHighlights();
@@ -222,6 +227,7 @@ export function CarModel({
     if (meshesToHighlight.length === 0) return;
 
     const targetIntensity = isHover ? 0.35 : 0.45;
+    const highlightColor = getHighlightColor();
     const newOriginalStates = [];
     meshesToHighlight.forEach((mesh) => {
       const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
@@ -241,7 +247,7 @@ export function CarModel({
       mats.forEach((m) => {
         if (!m) return;
         if (m.emissive) {
-          m.emissive.set('#38bdf8');
+          m.emissive.set(highlightColor);
           gsap.killTweensOf(m);
           gsap.to(m, {
             emissiveIntensity: targetIntensity,
@@ -249,7 +255,7 @@ export function CarModel({
             ease: 'power1.out'
           });
         } else if (m.color) {
-          m.color.set('#38bdf8');
+          m.color.set(highlightColor);
         }
       });
     });
@@ -323,7 +329,7 @@ export function CarModel({
                 }
               });
               if (m.emissive) {
-                m.emissive.set('#38bdf8');
+                m.emissive.set(getHighlightColor());
                 gsap.to(m, {
                   emissiveIntensity: 0.18,
                   duration: 0.4,
@@ -434,9 +440,9 @@ export function CarModel({
 
     console.log(
       '%c🎯 [Clicked Mesh Object]',
-      'color: #06b6d4; font-weight: bold; font-size: 13px;'
+      'color: #a33b4a; font-weight: bold; font-size: 13px;'
     );
-    console.log(`Name: "%c${clickedMesh.name}%c"`, 'color: #38bdf8; font-weight: bold;', '');
+    console.log(`Name: "%c${clickedMesh.name}%c"`, 'color: #a33b4a; font-weight: bold;', '');
     console.log('Type:', clickedMesh.type);
     console.log('Parent:', clickedMesh.parent?.name || '(root)');
 

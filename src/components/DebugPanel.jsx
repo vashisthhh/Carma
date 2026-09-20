@@ -302,7 +302,7 @@ export function DebugPanel({
           onClick={() => setIsOpen(true)}
           title="Open Scene Graph Tree & Transform Inspector"
         >
-          <FolderTree size={16} color="#38bdf8" />
+          <FolderTree size={16} />
           <span>Inspector ({totalCount})</span>
         </button>
       )}
@@ -471,7 +471,7 @@ export function DebugPanel({
                 <div className="search-result-count">
                   {matchCount > 0 ? (
                     <span>
-                      Found <strong style={{ color: '#38bdf8' }}>{matchCount}</strong> matching object
+                      Found <strong style={{ color: 'var(--accent-primary)' }}>{matchCount}</strong> matching object
                       {matchCount === 1 ? '' : 's'}
                     </span>
                   ) : (

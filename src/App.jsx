@@ -153,7 +153,7 @@ export default function App() {
 
     console.log(
       '%c🔍 [Entering Component Inspection Mode]',
-      'color: #38bdf8; font-weight: bold; font-size: 14px;'
+      'color: #a33b4a; font-weight: bold; font-size: 14px;'
     );
     console.log('Inspecting Component:', config.title);
     if (cameraFraming?.boundingBox) {
@@ -427,7 +427,7 @@ export default function App() {
       <header className="workspace-navbar">
         <div className="navbar-brand">
           <div className="navbar-brand-icon">
-            <Car size={18} color="#38bdf8" />
+            <Car size={18} />
           </div>
           <div className="navbar-brand-text">
             <span className="navbar-brand-title">CARMA</span>

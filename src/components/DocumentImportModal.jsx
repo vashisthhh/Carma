@@ -292,7 +292,7 @@ export function DocumentImportModal({
               {isVehicleDoc ? (
                 <Shield size={18} color="#10b981" />
               ) : (
-                <FileText size={18} color="#38bdf8" />
+                <FileText size={18} />
               )}
             </div>
             <div>
@@ -368,7 +368,7 @@ export function DocumentImportModal({
           {selectedFile && (
             <div className="ai-file-status-card">
               <div className="file-info-group">
-                <FileText size={20} color="#38bdf8" />
+                <FileText size={20} />
                 <div className="file-name-meta">
                   <span className="file-name">{selectedFile.name}</span>
                   <span className="file-size">

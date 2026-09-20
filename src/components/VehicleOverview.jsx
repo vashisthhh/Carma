@@ -73,7 +73,7 @@ export function VehicleOverview({
       <header className="overview-header">
         <div className="overview-brand">
           <div className="brand-icon">
-            <Car size={20} color="#38bdf8" />
+            <Car size={20} />
           </div>
           <div className="brand-info">
             <span className="brand-name">Carma</span>
@@ -357,7 +357,7 @@ export function VehicleOverview({
             {/* Explore in 3D Callout Card */}
             <div className="explore-callout-card">
               <div className="callout-header">
-                <Box size={18} color="#38bdf8" />
+                <Box size={18} />
                 <span className="callout-title">Interactive 3D Inspection</span>
               </div>
               <p className="callout-desc">
@@ -381,7 +381,7 @@ export function VehicleOverview({
           <div className="overview-modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <div className="modal-title-group">
-                <Car size={18} color="#38bdf8" />
+                <Car size={18} />
                 <h3>Add Vehicle</h3>
               </div>
               <button

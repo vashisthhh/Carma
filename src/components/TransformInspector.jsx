@@ -61,7 +61,7 @@ export function TransformInspector({
       <div className="inspector-section">
         <div className="inspector-section-header">
           <div className="section-title">
-            <Compass size={15} color="#38bdf8" />
+            <Compass size={15} />
             <span>Active Selection Transform</span>
           </div>
           {transformData && (
