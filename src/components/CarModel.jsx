@@ -7,6 +7,7 @@ import { applyRuntimeSplits } from '../utils/geometrySplitter';
 
 export function CarModel({
   onLoaded,
+  onError,
   onSelectMesh,
   selectedMesh,
   inspectionConfig,
@@ -27,10 +28,11 @@ export function CarModel({
   useEffect(() => {
     if (!gltf || !gltf.scene) return;
 
-    // 1. Execute runtime logical splitting of merged front wheel meshes
-    // tyre front -> tyre-front-left + tyre-front-right
-    // rim front   -> rim-front-left + rim-front-right
-    applyRuntimeSplits(gltf.scene);
+    try {
+      // 1. Execute runtime logical splitting of merged front wheel meshes
+      // tyre front -> tyre-front-left + tyre-front-right
+      // rim front   -> rim-front-left + rim-front-right
+      applyRuntimeSplits(gltf.scene);
 
     const flatNodes = [];
     const nodeMap = new Map();
@@ -165,7 +167,13 @@ export function CarModel({
         groupCount
       });
     }
-  }, [gltf, onLoaded]);
+  } catch (err) {
+    console.error('[CarModel] Initialization error:', err);
+    if (onError) {
+      onError(err);
+    }
+  }
+}, [gltf, onLoaded, onError]);
 
   // Restore any highlighted materials
   const restoreOriginalHighlights = () => {

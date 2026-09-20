@@ -131,7 +131,9 @@ export default function App() {
     groupCount: 0
   });
   const [selectedMesh, setSelectedMesh] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [modelStatus, setModelStatus] = useState('loading'); // 'loading' | 'loaded' | 'failed'
+  const [modelLoadError, setModelLoadError] = useState(null);
+  const [modelRetryKey, setModelRetryKey] = useState(0);
 
   // Component Inspection Mode States (3D View)
   const [activeInspectionConfig, setActiveInspectionConfig] = useState(null);
@@ -141,7 +143,36 @@ export default function App() {
   // Callback when 3D model finishes loading and traversing
   const handleLoaded = useCallback((data) => {
     setModelData(data);
-    setIsLoading(false);
+    setModelStatus('loaded');
+    setModelLoadError(null);
+  }, []);
+
+  // Callback when 3D model encounters an error
+  const handleModelError = useCallback((err) => {
+    console.warn('[Carma 3D] Model loading error:', err);
+    setModelStatus('failed');
+    setModelLoadError(err?.message || 'Failed to load 3D vehicle model.');
+  }, []);
+
+  // Safe timeout for model loading so the UI never hangs indefinitely
+  useEffect(() => {
+    if (modelStatus === 'loaded' || !currentVehicle?.modelPath) return;
+
+    const timer = setTimeout(() => {
+      if (modelStatus === 'loading') {
+        console.warn('[Carma 3D] Model loading timed out after 18s.');
+        setModelStatus('failed');
+        setModelLoadError('Loading took too long. Check your connection and retry.');
+      }
+    }, 18000);
+
+    return () => clearTimeout(timer);
+  }, [modelStatus, currentVehicle?.modelPath, modelRetryKey]);
+
+  const handleRetryModel = useCallback(() => {
+    setModelStatus('loading');
+    setModelLoadError(null);
+    setModelRetryKey((k) => k + 1);
   }, []);
 
   // Enter Component Inspection Mode with dynamic bounding-box framing
@@ -571,20 +602,45 @@ export default function App() {
         </div>
 
         {/* Loading Screen for 3D Asset */}
-        {isLoading && currentVehicle?.modelPath && (
+        {modelStatus === 'loading' && currentVehicle?.modelPath && (
           <div className="loading-screen">
             <div className="spinner"></div>
             <div className="loading-text">
               Loading {currentVehicle?.make} {currentVehicle?.model} 3D Model...
+            </div>
+            <div className="loading-subtext">
+              Downloading 3D vehicle asset (24 MB)...
             </div>
           </div>
         )}
 
         {/* 3D Canvas Viewport */}
         <div className="hero-3d-canvas-container">
-          {currentVehicle?.modelPath ? (
+          {modelStatus === 'failed' ? (
+            <div className="no-3d-fallback">
+              <div className="fallback-card">
+                <AlertTriangle size={36} color="#d97706" />
+                <h3>3D Vehicle Viewport Paused</h3>
+                <p>
+                  {modelLoadError || 'The 3D model could not be loaded.'}
+                  <br />
+                  Your vehicle workspace, records, and documents below are fully functional.
+                </p>
+                <button
+                  type="button"
+                  className="btn-switch-demo"
+                  onClick={handleRetryModel}
+                >
+                  <RotateCcw size={13} style={{ display: 'inline', marginRight: 6 }} />
+                  <span>Retry Loading 3D Model</span>
+                </button>
+              </div>
+            </div>
+          ) : currentVehicle?.modelPath ? (
             <CarViewer
+              key={modelRetryKey}
               onLoaded={handleLoaded}
+              onError={handleModelError}
               onSelectMesh={handleSelectMesh}
               selectedMesh={selectedMesh}
               inspectionConfig={activeInspectionConfig}

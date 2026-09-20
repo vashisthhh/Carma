@@ -24,6 +24,9 @@ class CanvasErrorBoundary extends Component {
 
   componentDidCatch(error, errorInfo) {
     console.warn('CarViewer 3D Canvas error caught by local boundary:', error, errorInfo);
+    if (this.props.onError) {
+      this.props.onError(error);
+    }
   }
 
   handleRetry = () => {
@@ -133,6 +136,7 @@ function CameraController({ inspectionState, controlsRef }) {
 
 export function CarViewer({
   onLoaded,
+  onError,
   onSelectMesh,
   selectedMesh,
   inspectionConfig,
@@ -152,12 +156,19 @@ export function CarViewer({
         </div>
       )}
 
-      <CanvasErrorBoundary key={canvasKey} onRetry={() => setCanvasKey((k) => k + 1)}>
+      <CanvasErrorBoundary
+        key={canvasKey}
+        onError={onError}
+        onRetry={() => {
+          setCanvasKey((k) => k + 1);
+          if (onError) onError(null);
+        }}
+      >
         <Canvas
           shadows
           dpr={[1, 1.5]}
           camera={{ position: [4.5, 2.2, 4.5], fov: 42 }}
-          gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
+          gl={{ antialias: true, alpha: true }}
           style={{ background: 'transparent' }}
         >
           {/* Dynamic Camera Animation Controller */}
@@ -188,6 +199,7 @@ export function CarViewer({
             <Center top>
               <CarModel
                 onLoaded={onLoaded}
+                onError={onError}
                 onSelectMesh={onSelectMesh}
                 selectedMesh={selectedMesh}
                 inspectionConfig={inspectionConfig}
