@@ -24,6 +24,7 @@ import {
   renameComponent,
   clearComponentHistory,
   getComponentDisplayName,
+  getComponentServiceHistory,
   resetServiceHistoryData
 } from './data/serviceHistoryData';
 import {
@@ -37,12 +38,41 @@ import {
   LogOut,
   AlertTriangle,
   ChevronDown,
-  Edit3
+  Edit3,
+  Sun,
+  Moon,
+  Laptop
 } from 'lucide-react';
 
 export default function App() {
   const containerRef = useRef(null);
   const userMenuRef = useRef(null);
+
+  // Theme Management (System / Light / Dark)
+  const [themePreference, setThemePreference] = useState(() => {
+    return localStorage.getItem('carma_theme_preference') || 'system';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('carma_theme_preference', themePreference);
+
+    function applyTheme() {
+      let resolvedTheme = themePreference;
+      if (themePreference === 'system') {
+        resolvedTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+      document.documentElement.setAttribute('data-theme', resolvedTheme);
+    }
+
+    applyTheme();
+
+    if (themePreference === 'system') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const handler = () => applyTheme();
+      mediaQuery.addEventListener('change', handler);
+      return () => mediaQuery.removeEventListener('change', handler);
+    }
+  }, [themePreference]);
 
   // Authentication & Session State
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
@@ -153,15 +183,34 @@ export default function App() {
       }
 
       if (componentId) {
-        const config = getInspectionConfig(componentId);
-        if (config && modelData.nodeMap) {
-          const meshObj =
-            modelData.nodeMap.get(componentId)?.objectRef ||
-            modelData.nodeMap.get(config.targetMeshName)?.objectRef;
-          if (meshObj) {
-            const cameraFraming = calculateCameraFraming(meshObj);
-            handleEnterInspection(config, cameraFraming);
+        const serviceData = getComponentServiceHistory(componentId);
+        const searchNames = [
+          componentId,
+          serviceData?.componentId,
+          ...(serviceData?.aliases || [])
+        ].filter(Boolean);
+
+        let meshObj = null;
+        let foundConfig = null;
+
+        if (modelData?.nodeMap) {
+          for (const name of searchNames) {
+            const node = modelData.nodeMap.get(name) || modelData.nodeMap.get(name.toLowerCase());
+            if (node?.objectRef) {
+              meshObj = node.objectRef;
+              foundConfig = getInspectionConfig(node.name || name);
+              break;
+            }
           }
+        }
+
+        if (!foundConfig) {
+          foundConfig = getInspectionConfig(componentId);
+        }
+
+        if (meshObj && foundConfig) {
+          const cameraFraming = calculateCameraFraming(meshObj);
+          handleEnterInspection(foundConfig, cameraFraming);
         }
       }
     },
@@ -192,19 +241,26 @@ export default function App() {
 
   // Unified Modal Opening Handlers
   const handleOpenServiceDocImport = useCallback(() => {
+    const rawTarget = activeInspectionConfig?.targetMeshName || activeInspectionConfig?.id;
+    const resolvedCompId = rawTarget
+      ? (getComponentServiceHistory(rawTarget)?.componentId || rawTarget)
+      : null;
     setImportModalConfig({
       isOpen: true,
       context: 'service-record',
-      componentId: activeInspectionConfig?.targetMeshName || null,
+      componentId: resolvedCompId,
       documentCategory: null
     });
   }, [activeInspectionConfig]);
 
   const handleOpenAddRecordFromInspection = useCallback((compTargetId) => {
+    const resolvedCompId = compTargetId
+      ? (getComponentServiceHistory(compTargetId)?.componentId || compTargetId)
+      : null;
     setImportModalConfig({
       isOpen: true,
       context: 'service-record',
-      componentId: compTargetId,
+      componentId: resolvedCompId,
       documentCategory: null
     });
   }, []);
@@ -359,6 +415,8 @@ export default function App() {
         existingVehicleData={vehicleProfile}
         onLogin={handleLogin}
         onComplete={handleOnboardingComplete}
+        themePreference={themePreference}
+        onThemeChange={setThemePreference}
       />
     );
   }
@@ -401,6 +459,39 @@ export default function App() {
                   {currentVehicle?.registrationNumber && (
                     <span className="dropdown-reg-badge">{currentVehicle.registrationNumber}</span>
                   )}
+                </div>
+                <div className="user-dropdown-divider"></div>
+                <div className="user-dropdown-theme-section">
+                  <span className="dropdown-section-label">Appearance</span>
+                  <div className="theme-segmented-control">
+                    <button
+                      type="button"
+                      className={`theme-segment-btn ${themePreference === 'system' ? 'active' : ''}`}
+                      onClick={() => setThemePreference('system')}
+                      title="Match system appearance"
+                    >
+                      <Laptop size={12} />
+                      <span>Auto</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`theme-segment-btn ${themePreference === 'light' ? 'active' : ''}`}
+                      onClick={() => setThemePreference('light')}
+                      title="Light appearance"
+                    >
+                      <Sun size={12} />
+                      <span>Light</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`theme-segment-btn ${themePreference === 'dark' ? 'active' : ''}`}
+                      onClick={() => setThemePreference('dark')}
+                      title="Dark appearance"
+                    >
+                      <Moon size={12} />
+                      <span>Dark</span>
+                    </button>
+                  </div>
                 </div>
                 <div className="user-dropdown-divider"></div>
                 <button

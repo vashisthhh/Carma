@@ -122,28 +122,28 @@ export function VehicleWorkspace({
       {/* 1. Compact Vehicle Summary Strip (Specification/Status Strip) */}
       <div className="workspace-summary-strip">
         <div className="summary-metric-item">
-          <span className="summary-metric-label">DOCUMENTED SERVICES</span>
+          <span className="summary-metric-label">Documented Services</span>
           <span className="summary-metric-val">{totalRecords}</span>
         </div>
 
         <div className="summary-metric-divider"></div>
 
         <div className="summary-metric-item">
-          <span className="summary-metric-label">DOCUMENTED SPEND</span>
+          <span className="summary-metric-label">Documented Spend</span>
           <span className="summary-metric-val">₹{totalSpend.toLocaleString('en-IN')}</span>
         </div>
 
         <div className="summary-metric-divider"></div>
 
         <div className="summary-metric-item">
-          <span className="summary-metric-label">SERVICE DOCUMENTS</span>
+          <span className="summary-metric-label">Service Documents</span>
           <span className="summary-metric-val">{documentCount}</span>
         </div>
 
         <div className="summary-metric-divider"></div>
 
         <div className="summary-metric-item">
-          <span className="summary-metric-label">INSURANCE</span>
+          <span className="summary-metric-label">Insurance</span>
           <div className="summary-status-content">
             <span className={`summary-status-badge ${insuranceStatus ? insuranceStatus.badgeClass : 'status-none'}`}>
               {insuranceStatus ? insuranceStatus.status : 'Not uploaded'}
@@ -185,7 +185,7 @@ export function VehicleWorkspace({
       <div className="workspace-section">
         <div className="section-header-row">
           <div>
-            <h2 className="workspace-section-title">SERVICE HISTORY</h2>
+            <h2 className="workspace-section-title">Service History</h2>
             <span className="workspace-section-subtitle">
               Chronological timeline of component maintenance, repair & replacement events
             </span>
@@ -323,7 +323,7 @@ export function VehicleWorkspace({
       <div className="workspace-section">
         <div className="section-header-row">
           <div>
-            <h2 className="workspace-section-title">SERVICE DOCUMENTS</h2>
+            <h2 className="workspace-section-title">Service Documents</h2>
             <span className="workspace-section-subtitle">
               Invoices and maintenance records associated with this vehicle.
             </span>
@@ -427,7 +427,7 @@ export function VehicleWorkspace({
       <div className="workspace-section">
         <div className="section-header-row">
           <div>
-            <h2 className="workspace-section-title">VEHICLE COMPONENTS</h2>
+            <h2 className="workspace-section-title">Vehicle Components</h2>
             <span className="workspace-section-subtitle">
               Interactive 3D parts & maintenance tracking categories
             </span>
@@ -522,7 +522,7 @@ export function VehicleWorkspace({
       <div className="workspace-section">
         <div className="section-header-row">
           <div>
-            <h2 className="workspace-section-title">VEHICLE DOCUMENTS</h2>
+            <h2 className="workspace-section-title">Vehicle Documents</h2>
             <span className="workspace-section-subtitle">
               Statutory ownership & compliance certificates
             </span>
@@ -539,7 +539,7 @@ export function VehicleWorkspace({
                     <ShieldCheck size={18} color={insuranceStatus?.isExpired ? '#ef4444' : '#10b981'} />
                   </div>
                   <div>
-                    <h3 className="statutory-title">INSURANCE</h3>
+                    <h3 className="statutory-title">Insurance</h3>
                     <span className="statutory-subtitle">{insuranceDoc.issuer || 'Motor Insurance Provider'}</span>
                   </div>
                 </div>
@@ -609,7 +609,7 @@ export function VehicleWorkspace({
                     <Shield size={18} color="#64748b" />
                   </div>
                   <div>
-                    <h3 className="statutory-title">INSURANCE</h3>
+                    <h3 className="statutory-title">Insurance</h3>
                     <span className="statutory-subtitle">Statutory vehicle coverage</span>
                   </div>
                 </div>

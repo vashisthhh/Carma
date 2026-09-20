@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   ArrowLeft,
+  ArrowRight,
   Plus,
   Wrench,
   Info,
@@ -78,26 +79,32 @@ export function InspectionPanel({
   };
 
   return (
-    <aside className="inspection-panel">
-      {/* Top Header with Back Navigation */}
+    <aside className="inspection-panel" aria-label="Component Inspection Panel">
+      {/* Top Header with Back to Vehicle Navigation */}
       <div className="inspection-header">
-        <button className="back-to-vehicle-btn" onClick={onExit} title="Exit Inspection Mode">
-          <ArrowLeft size={15} />
-          <span>Back to Vehicle</span>
+        <button
+          type="button"
+          className="back-to-vehicle-btn"
+          onClick={onExit}
+          title="Exit Inspection and return to full vehicle view"
+        >
+          <ArrowLeft size={13} />
+          <span>Back to vehicle</span>
         </button>
-        <span className="inspection-badge">COMPONENT INSPECTION</span>
+        <span className="inspection-badge">INSPECTION</span>
       </div>
 
       {/* Component Title & Subtitle */}
       <div className="inspection-title-section">
         <div className="component-title-row">
-          <h1 className="inspection-title">{displayName.toUpperCase()}</h1>
+          <h1 className="inspection-title">{displayName}</h1>
           <div className="component-menu-wrapper">
             <button
               type="button"
               className="btn-dots-menu"
               onClick={() => setShowComponentMenu(!showComponentMenu)}
               title="Component options"
+              aria-expanded={showComponentMenu}
             >
               <MoreVertical size={16} />
             </button>
@@ -135,15 +142,31 @@ export function InspectionPanel({
             )}
           </div>
         </div>
-        <p className="inspection-subtitle">
-          {records.length} documented {records.length === 1 ? 'event' : 'events'}
-        </p>
+        <div className="inspection-subtitle-row">
+          <span className="inspection-subtitle">
+            {records.length > 0
+              ? `${records.length} documented ${records.length === 1 ? 'event' : 'events'}`
+              : 'No documented service history'}
+          </span>
+          {records.length > 0 && records[0]?.date && (
+            <>
+              <span className="inspection-meta-sep">·</span>
+              <span className="inspection-last-date">
+                Last documented: {formatDate(records[0].date)}
+              </span>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Primary Add Record Action */}
       <div className="inspection-quick-action">
-        <button className="add-record-btn" onClick={handleAddRecordClick}>
-          <Plus size={15} />
+        <button
+          type="button"
+          className="add-record-btn"
+          onClick={handleAddRecordClick}
+        >
+          <Plus size={14} />
           <span>Add Service Record</span>
         </button>
       </div>
@@ -153,7 +176,7 @@ export function InspectionPanel({
         <div className="service-history-header">
           <div className="service-history-title-row">
             <h2 className="service-history-title">
-              <Clock size={15} color="#38bdf8" />
+              <Clock size={14} color="#38bdf8" />
               <span>Documented History</span>
             </h2>
           </div>
@@ -166,15 +189,20 @@ export function InspectionPanel({
               const typeLower = (record.type || 'service').toLowerCase();
               return (
                 <div key={record.id} className="service-record-card">
-                  {/* Card Header: Type Badge & Date & Actions */}
+                  {/* Card Header: Type Badge, Date, Mileage & Actions */}
                   <div className="record-header">
                     <div className="record-header-left">
                       <span className={`service-type-badge badge-${typeLower}`}>
-                        {record.type}
+                        {record.type || 'Service'}
                       </span>
                       <div className="record-date">
-                        <Calendar size={13} />
                         <span>{formatDate(record.date)}</span>
+                        {record.mileage !== undefined && record.mileage !== null && !isNaN(Number(record.mileage)) ? (
+                          <>
+                            <span className="record-bullet">·</span>
+                            <span>{Number(record.mileage).toLocaleString('en-IN')} km</span>
+                          </>
+                        ) : null}
                       </div>
                     </div>
                     <div className="record-actions">
@@ -184,7 +212,7 @@ export function InspectionPanel({
                         onClick={() => onEditRecord && onEditRecord(record)}
                         title="Edit service record"
                       >
-                        <Edit3 size={12} />
+                        <Edit3 size={11} />
                         <span>Edit</span>
                       </button>
                       <button
@@ -193,70 +221,66 @@ export function InspectionPanel({
                         onClick={() => onDeleteRecord && onDeleteRecord(record)}
                         title="Delete service record"
                       >
-                        <Trash2 size={12} />
+                        <Trash2 size={11} />
                         <span>Delete</span>
                       </button>
                     </div>
                   </div>
 
-                  {/* Metrics Row: Mileage & Cost */}
-                  <div className="record-metrics-row">
-                    <div className="record-metric-item">
-                      <Gauge size={14} className="metric-icon" />
-                      <div className="metric-content">
-                        <span className="metric-label">Mileage</span>
-                        <span className="metric-value">{record.mileage.toLocaleString()} km</span>
-                      </div>
-                    </div>
-                    <div className="record-metric-item">
-                      <IndianRupee size={14} className="metric-icon" />
-                      <div className="metric-content">
-                        <span className="metric-label">Cost</span>
-                        <span className="metric-value">₹{record.cost.toLocaleString()}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Description */}
-                  <div className="record-description">
-                    {record.description}
-                  </div>
-
-                  {/* Document Attachment Indicator */}
-                  {record.document && (
-                    <div className="record-document-attachment">
-                      <div className="document-info">
-                        <Paperclip size={13} className="document-icon" />
-                        <span className="document-name" title={record.document.name}>
-                          {record.document.name}
-                        </span>
-                        {record.document.size && (
-                          <span className="document-size">
-                            ({(record.document.size / 1024).toFixed(0)} KB)
-                          </span>
-                        )}
-                      </div>
-                      {record.document.url && (
-                        <a
-                          href={record.document.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="view-document-btn"
-                          title={`View ${record.document.name}`}
-                        >
-                          <ExternalLink size={11} />
-                          <span>View</span>
-                        </a>
-                      )}
+                  {/* Prominent Cost Metric */}
+                  {record.cost !== undefined && record.cost !== null && !isNaN(Number(record.cost)) && (
+                    <div className="record-cost-row">
+                      <span className="record-cost-val">
+                        ₹{Number(record.cost).toLocaleString('en-IN')}
+                      </span>
                     </div>
                   )}
 
-                  {/* Record Footer with ID and Verification */}
+                  {/* Description */}
+                  {record.description && (
+                    <div className="record-description">
+                      {record.description}
+                    </div>
+                  )}
+
+                  {/* Document Evidence Section */}
+                  {record.document && (
+                    <div className="record-evidence-block">
+                      <span className="evidence-header-label">EVIDENCE</span>
+                      <div className="evidence-card">
+                        <div className="evidence-file-info">
+                          <FileText size={13} className="evidence-icon" />
+                          <span className="evidence-filename" title={record.document.name}>
+                            {record.document.name}
+                          </span>
+                          {record.document.size && (
+                            <span className="evidence-filesize">
+                              ({(record.document.size / 1024).toFixed(0)} KB)
+                            </span>
+                          )}
+                        </div>
+                        {record.document.url && (
+                          <a
+                            href={record.document.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="evidence-view-link"
+                            title={`View ${record.document.name}`}
+                          >
+                            <span>View document</span>
+                            <ArrowRight size={11} />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Record Footer */}
                   <div className="record-footer">
                     <span className="record-id">{record.id}</span>
                     <span className="record-verified-tag">
                       <CheckCircle2 size={11} />
-                      <span>Verified Test Record</span>
+                      <span>Verified Record</span>
                     </span>
                   </div>
                 </div>
@@ -267,12 +291,22 @@ export function InspectionPanel({
           /* Empty State when no records exist */
           <div className="service-empty-state">
             <div className="empty-icon-wrap">
-              <FileText size={22} color="#64748b" />
+              <FileText size={20} color="var(--text-tertiary)" />
             </div>
-            <h3 className="empty-title">No service records found.</h3>
+            <h3 className="empty-title">No documented service history</h3>
             <p className="empty-text">
-              No service or maintenance records have been logged for this component yet.
+              No service events have been recorded for this component yet.
             </p>
+            <div className="empty-state-actions">
+              <button
+                type="button"
+                className="btn-empty-add-record"
+                onClick={handleAddRecordClick}
+              >
+                <Plus size={13} />
+                <span>Add Service Record</span>
+              </button>
+            </div>
           </div>
         )}
       </div>

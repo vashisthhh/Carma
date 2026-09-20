@@ -10,7 +10,9 @@ export function CarModel({
   onSelectMesh,
   selectedMesh,
   inspectionConfig,
-  onEnterInspection
+  onEnterInspection,
+  onHoverComponent,
+  onUnhoverComponent
 }) {
   const { camera } = useThree();
   const gltf = useGLTF('/models/eon.glb');
@@ -119,6 +121,10 @@ export function CarModel({
 
       flatNodes.push(treeNode);
       nodeMap.set(currentId, treeNode);
+      if (node.name) {
+        nodeMap.set(node.name, treeNode);
+        nodeMap.set(node.name.toLowerCase(), treeNode);
+      }
 
       if (node.children && node.children.length > 0) {
         node.children.forEach((child) => {
@@ -168,8 +174,17 @@ export function CarModel({
         savedMats.forEach((saved) => {
           if (!saved || !saved.material) return;
           if (saved.emissive && saved.material.emissive) {
-            saved.material.emissive.copy(saved.emissive);
-            saved.material.emissiveIntensity = saved.emissiveIntensity;
+            gsap.killTweensOf(saved.material);
+            gsap.to(saved.material, {
+              emissiveIntensity: saved.emissiveIntensity || 0,
+              duration: 0.22,
+              ease: 'power1.out',
+              onComplete: () => {
+                if (saved.material.emissive) {
+                  saved.material.emissive.copy(saved.emissive);
+                }
+              }
+            });
           }
           if (saved.color && saved.material.color) {
             saved.material.color.copy(saved.color);
@@ -183,8 +198,8 @@ export function CarModel({
     }
   };
 
-  // Highlight an object (ONLY the target mesh or all meshes if a group)
-  const applyHighlight = (targetObject, duration = 3000) => {
+  // Highlight an object (subtle, restrained accent without harsh neon effects)
+  const applyHighlight = (targetObject, duration = 3000, isHover = false) => {
     restoreOriginalHighlights();
     if (highlightTimeoutRef.current) {
       clearTimeout(highlightTimeoutRef.current);
@@ -206,6 +221,7 @@ export function CarModel({
 
     if (meshesToHighlight.length === 0) return;
 
+    const targetIntensity = isHover ? 0.35 : 0.45;
     const newOriginalStates = [];
     meshesToHighlight.forEach((mesh) => {
       const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
@@ -214,7 +230,7 @@ export function CarModel({
         return {
           material: m,
           emissive: m.emissive ? m.emissive.clone() : null,
-          emissiveIntensity: m.emissiveIntensity !== undefined ? m.emissiveIntensity : 1,
+          emissiveIntensity: m.emissiveIntensity !== undefined ? m.emissiveIntensity : 0,
           color: m.color ? m.color.clone() : null,
           wireframe: m.wireframe
         };
@@ -225,10 +241,15 @@ export function CarModel({
       mats.forEach((m) => {
         if (!m) return;
         if (m.emissive) {
-          m.emissive.set('#00e5ff');
-          m.emissiveIntensity = 2.0;
+          m.emissive.set('#38bdf8');
+          gsap.killTweensOf(m);
+          gsap.to(m, {
+            emissiveIntensity: targetIntensity,
+            duration: 0.18,
+            ease: 'power1.out'
+          });
         } else if (m.color) {
-          m.color.set('#00e5ff');
+          m.color.set('#38bdf8');
         }
       });
     });
@@ -260,7 +281,7 @@ export function CarModel({
         ...inspectionConfig.associatedMeshNames
       ];
 
-      // 1. Dim the rest of the vehicle
+      // 1. Dim the rest of the vehicle smoothly to 0.12 opacity, focus target component
       gltf.scene.traverse((child) => {
         if (child.isMesh && child.visible) {
           const mats = Array.isArray(child.material) ? child.material : [child.material];
@@ -283,7 +304,7 @@ export function CarModel({
               gsap.killTweensOf(m);
               gsap.to(m, {
                 opacity: 0.12,
-                duration: 0.8,
+                duration: 0.6,
                 ease: 'power2.out',
                 onUpdate: () => {
                   m.needsUpdate = true;
@@ -295,12 +316,20 @@ export function CarModel({
               gsap.killTweensOf(m);
               gsap.to(m, {
                 opacity: 1.0,
-                duration: 0.5,
+                duration: 0.4,
                 ease: 'power2.out',
                 onUpdate: () => {
                   m.needsUpdate = true;
                 }
               });
+              if (m.emissive) {
+                m.emissive.set('#38bdf8');
+                gsap.to(m, {
+                  emissiveIntensity: 0.18,
+                  duration: 0.4,
+                  ease: 'power2.out'
+                });
+              }
             }
           });
         }
@@ -317,7 +346,7 @@ export function CarModel({
             x: originalPos.x + offset[0],
             y: originalPos.y + offset[1],
             z: originalPos.z + offset[2],
-            duration: 1.2,
+            duration: 0.85,
             ease: 'power2.out'
           });
         }
@@ -332,7 +361,7 @@ export function CarModel({
             x: origPos.x,
             y: origPos.y,
             z: origPos.z,
-            duration: 1.0,
+            duration: 0.85,
             ease: 'power2.inOut'
           });
         }
@@ -347,11 +376,15 @@ export function CarModel({
                 gsap.killTweensOf(m);
                 gsap.to(m, {
                   opacity: saved.opacity,
-                  duration: 0.9,
+                  duration: 0.6,
                   ease: 'power2.inOut',
                   onComplete: () => {
                     m.transparent = saved.transparent;
                     m.depthWrite = saved.depthWrite;
+                    if (m.emissive) {
+                      m.emissive.set('#000000');
+                      m.emissiveIntensity = 0;
+                    }
                     m.needsUpdate = true;
                   }
                 });
@@ -373,7 +406,10 @@ export function CarModel({
     if (config) {
       document.body.style.cursor = 'pointer';
       if (!inspectionConfig) {
-        applyHighlight(mesh, 0); // Keep highlighted while hovering
+        applyHighlight(mesh, 0, true);
+        if (onHoverComponent) {
+          onHoverComponent(config.title || mesh.name, mesh.name);
+        }
       }
     }
   };
@@ -383,6 +419,9 @@ export function CarModel({
     document.body.style.cursor = 'auto';
     if (!inspectionConfig && !selectedMesh) {
       restoreOriginalHighlights();
+    }
+    if (onUnhoverComponent) {
+      onUnhoverComponent();
     }
   };
 

@@ -26,14 +26,14 @@ function CameraController({ inspectionState, controlsRef }) {
     prevInspectionRef.current = inspectionState;
 
     if (isInspecting && inspectionState.cameraPos && inspectionState.target) {
-      // Smoothly animate camera to the component framing
+      // Smoothly animate camera to the component framing (short, controlled, deliberate)
       gsap.killTweensOf(camera.position);
       gsap.to(camera.position, {
         x: inspectionState.cameraPos[0],
         y: inspectionState.cameraPos[1],
         z: inspectionState.cameraPos[2],
-        duration: 1.2,
-        ease: 'power2.inOut'
+        duration: 0.85,
+        ease: 'power2.out'
       });
 
       if (controlsRef.current) {
@@ -42,8 +42,8 @@ function CameraController({ inspectionState, controlsRef }) {
           x: inspectionState.target[0],
           y: inspectionState.target[1],
           z: inspectionState.target[2],
-          duration: 1.2,
-          ease: 'power2.inOut',
+          duration: 0.85,
+          ease: 'power2.out',
           onUpdate: () => controlsRef.current && controlsRef.current.update()
         });
       }
@@ -54,7 +54,7 @@ function CameraController({ inspectionState, controlsRef }) {
         x: DEFAULT_CAMERA_POS[0],
         y: DEFAULT_CAMERA_POS[1],
         z: DEFAULT_CAMERA_POS[2],
-        duration: 1.2,
+        duration: 0.85,
         ease: 'power2.inOut'
       });
 
@@ -64,7 +64,7 @@ function CameraController({ inspectionState, controlsRef }) {
           x: DEFAULT_TARGET[0],
           y: DEFAULT_TARGET[1],
           z: DEFAULT_TARGET[2],
-          duration: 1.2,
+          duration: 0.85,
           ease: 'power2.inOut',
           onUpdate: () => controlsRef.current && controlsRef.current.update()
         });
@@ -85,14 +85,22 @@ export function CarViewer({
   onEnterInspection
 }) {
   const controlsRef = useRef();
+  const [hoveredTitle, setHoveredTitle] = React.useState(null);
 
   return (
     <div className="canvas-container">
+      {/* Minimal 3D Component Hover Tooltip */}
+      {!inspectionConfig && hoveredTitle && (
+        <div className="minimal-3d-tooltip" role="tooltip">
+          <span>{hoveredTitle}</span>
+        </div>
+      )}
+
       <Canvas
         shadows
         camera={{ position: [4.5, 2.2, 4.5], fov: 42 }}
-        gl={{ antialias: true, alpha: false }}
-        style={{ background: '#0e1014' }}
+        gl={{ antialias: true, alpha: true }}
+        style={{ background: 'transparent' }}
       >
         {/* Dynamic Camera Animation Controller */}
         <CameraController
@@ -126,6 +134,8 @@ export function CarViewer({
               selectedMesh={selectedMesh}
               inspectionConfig={inspectionConfig}
               onEnterInspection={onEnterInspection}
+              onHoverComponent={(title) => setHoveredTitle(title)}
+              onUnhoverComponent={() => setHoveredTitle(null)}
             />
           </Center>
 
@@ -148,12 +158,6 @@ export function CarViewer({
           minDistance={0.5} // Allow close-up inspection
           maxDistance={25}
           maxPolarAngle={Math.PI / 2 + 0.05}
-        />
-
-        {/* Subtle ground grid */}
-        <gridHelper
-          args={[20, 20, '#1e293b', '#131822']}
-          position={[0, -0.01, 0]}
         />
       </Canvas>
     </div>

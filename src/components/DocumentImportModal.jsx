@@ -18,7 +18,12 @@ import {
   Edit3
 } from 'lucide-react';
 import { extractDocumentWithAI, normalizeDateToISO } from '../services/aiExtractionService';
-import { addServiceRecord, SUPPORTED_COMPONENTS, getComponentDisplayName } from '../data/serviceHistoryData';
+import {
+  addServiceRecord,
+  SUPPORTED_COMPONENTS,
+  getComponentDisplayName,
+  getComponentServiceHistory
+} from '../data/serviceHistoryData';
 import { updateVehicleDocument, calculateExpiryStatus } from '../data/vehicleData';
 
 /**
@@ -85,7 +90,10 @@ export function DocumentImportModal({
       setExtractionError(null);
       setIsManualEntry(false);
 
-      setTargetComponentId(defaultComponentId || 'tail-light');
+      const initialComp = defaultComponentId
+        ? (getComponentServiceHistory(defaultComponentId)?.componentId || defaultComponentId)
+        : 'tail-light';
+      setTargetComponentId(initialComp);
       setServiceType('Replacement');
       setDate(new Date().toISOString().split('T')[0]);
       setMileage('');
@@ -113,7 +121,9 @@ export function DocumentImportModal({
 
   // Auto-detect matching component from extracted text/parts (only used if defaultComponentId not specified)
   const detectComponentFromExtraction = (extracted) => {
-    if (defaultComponentId) return defaultComponentId;
+    if (defaultComponentId) {
+      return getComponentServiceHistory(defaultComponentId)?.componentId || defaultComponentId;
+    }
     if (!extracted) return 'tail-light';
     const text = `${extracted.parts || ''} ${extracted.description || ''} ${extracted.partsOrWork || ''}`.toLowerCase();
 
@@ -175,8 +185,10 @@ export function DocumentImportModal({
         if (fields.startDate) setStartDate(normalizeDateToISO(fields.startDate) || fields.startDate);
         if (fields.expiryDate) setExpiryDate(normalizeDateToISO(fields.expiryDate) || fields.expiryDate);
       } else {
-        // Populate service record fields
-        const detectedComp = defaultComponentId || detectComponentFromExtraction(fields);
+        // Populate service record fields: authoritative defaultComponentId takes precedence
+        const detectedComp = defaultComponentId
+          ? (getComponentServiceHistory(defaultComponentId)?.componentId || defaultComponentId)
+          : detectComponentFromExtraction(fields);
         setTargetComponentId(detectedComp);
 
         if (fields.serviceType) setServiceType(fields.serviceType);
@@ -197,11 +209,20 @@ export function DocumentImportModal({
   const handleSaveServiceRecord = (e) => {
     e.preventDefault();
 
+    const finalTargetId =
+      targetComponentId ||
+      (defaultComponentId
+        ? getComponentServiceHistory(defaultComponentId)?.componentId || defaultComponentId
+        : 'tail-light');
+
+    const safeMileage = mileage !== '' && !isNaN(Number(mileage)) ? parseInt(mileage, 10) : 0;
+    const safeCost = cost !== '' && !isNaN(Number(cost)) ? Number(cost) : 0;
+
     const recordData = {
       type: serviceType || 'Maintenance',
       date: date || new Date().toISOString().split('T')[0],
-      mileage: mileage ? parseInt(mileage, 10) : 0,
-      cost: cost ? parseFloat(cost) : 0,
+      mileage: safeMileage,
+      cost: safeCost,
       description: description || 'Service record',
       serviceCenter: serviceCenter || null,
       document: selectedFile
@@ -215,10 +236,10 @@ export function DocumentImportModal({
         : null
     };
 
-    const created = addServiceRecord(targetComponentId, recordData);
+    const created = addServiceRecord(finalTargetId, recordData);
 
     if (onRecordSaved) {
-      onRecordSaved(created, targetComponentId);
+      onRecordSaved(created, finalTargetId);
     }
 
     onClose();
@@ -675,7 +696,7 @@ export function DocumentImportModal({
                   className="btn-modal-submit-primary"
                 >
                   <CheckCircle2 size={15} />
-                  <span>Save Service Record</span>
+                  <span>{extractionResult ? 'Use Extracted Information' : 'Save Service Record'}</span>
                 </button>
               </div>
             </form>
